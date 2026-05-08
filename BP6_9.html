@@ -1,0 +1,2868 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Bauplanmanager</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',sans-serif;background:#0f172a;color:#f1f5f9;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+button,input,select,textarea{font-family:inherit;box-sizing:border-box}
+
+#header{background:linear-gradient(135deg,#1e3a5f,#0f2d4a);border-bottom:2px solid #e30613;padding:0 18px;display:flex;align-items:center;gap:10px;height:54px;flex-shrink:0}
+#header h1{font-size:16px;font-weight:800;white-space:nowrap}
+#km-nav{display:flex;align-items:center;gap:8px;flex:2;max-width:420px}
+#km-nav span{font-size:10px;color:#94a3b8;white-space:nowrap}
+#km-slider{flex:1;accent-color:#e30613}
+#km-badge{background:#1e3a5f;border-radius:6px;padding:4px 10px;font-size:11px;color:#93c5fd;white-space:nowrap}
+.hbtn{border:none;border-radius:7px;padding:6px 13px;font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap}
+#btn-upload{background:#e30613;color:#fff}
+#btn-settings{background:#334155;color:#94a3b8;font-size:16px;padding:6px 10px}
+
+#layout{display:flex;flex:1;overflow:hidden}
+#sidebar{width:210px;background:#1e293b;border-right:1px solid #334155;display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;transition:width .2s}
+#sidebar.collapsed{width:0;border-right:none}
+#sidebar-toggle{position:absolute;left:210px;top:50%;transform:translateY(-50%);width:16px;height:40px;background:#1e293b;border:1px solid #334155;border-left:none;border-radius:0 6px 6px 0;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:11px;z-index:100;transition:left .2s}
+#sidebar-toggle.collapsed{left:0}
+#layout{position:relative}
+#sidebar-label{padding:10px 14px;font-size:10px;font-weight:700;color:#64748b;letter-spacing:1px}
+#plan-list{flex:1;overflow-y:auto}
+.plan-item{padding:9px 14px 9px 12px;cursor:pointer;border-left:3px solid transparent;border-bottom:1px solid #334155;position:relative}
+.plan-item-actions{display:none;position:absolute;top:6px;right:6px;gap:3px}
+.plan-item:hover .plan-item-actions{display:flex}
+.pia-btn{background:#0f172a;border:none;color:#64748b;border-radius:5px;width:22px;height:22px;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.pia-btn:hover{background:#334155;color:#f1f5f9}
+.plan-item.active{border-left-color:#e30613;background:#273549}
+.plan-item .pname{font-size:12px;font-weight:600;color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.plan-item.active .pname{color:#f1f5f9}
+.plan-item .pkm{font-size:10px;color:#64748b;margin-top:1px}
+.plan-item .pbar-wrap{margin-top:4px;height:3px;background:#334155;border-radius:3px}
+.plan-item .pbar{height:3px;border-radius:3px;transition:width .3s}
+.plan-item .pstat{font-size:9px;color:#64748b;margin-top:2px}
+#stats{padding:12px;border-top:1px solid #334155;flex-shrink:0}
+#stats-label{font-size:10px;font-weight:700;color:#64748b;letter-spacing:1px;margin-bottom:6px}
+.stat-row{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+.stat-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.stat-name{font-size:11px;color:#94a3b8;flex:1}
+.stat-count{font-size:12px;font-weight:700}
+
+#main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+#empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:#475569}
+#empty .eicon{font-size:52px}
+#empty .etitle{font-size:16px;font-weight:700;color:#64748b}
+#empty .esub{font-size:13px}
+#empty .ebtn{background:#e30613;color:#fff;border:none;border-radius:8px;padding:9px 22px;font-weight:700;font-size:14px;cursor:pointer}
+
+#tabs{background:#1e293b;border-bottom:1px solid #334155;display:flex;padding:0 8px;flex-shrink:0;align-items:center;gap:3px;overflow-x:auto;scrollbar-width:none}
+#tabs::-webkit-scrollbar{display:none}
+.tab{background:none;border:none;border-bottom:2px solid transparent;color:#64748b;padding:8px 10px;font-weight:600;font-size:12px;cursor:pointer;white-space:nowrap}
+.tab.active{border-bottom-color:#e30613;color:#f1f5f9}
+#tab-hint{flex:1;font-size:11px;color:#475569;padding-left:6px;min-width:20px}
+#tab-add{background:#1e40af;color:#fff;border:none;border-radius:7px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap}
+
+#plan-view{flex:1;overflow:auto;background:#1a1a2e;position:relative;display:none}
+#plan-view.visible{display:block}
+#pdf-wrap{position:relative;display:inline-block;min-width:100%;transform-origin:top left;transition:transform .1s}
+#pdf-canvas{display:block}
+#overlay{position:absolute;inset:0;z-index:10}
+#overlay.place-mode{cursor:crosshair}
+#zoom-controls{position:fixed;bottom:24px;right:24px;display:flex;flex-direction:column;gap:4px;z-index:500}
+.zoom-btn{width:34px;height:34px;border-radius:8px;border:none;background:#1e293b;color:#f1f5f9;font-size:18px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.4)}
+.zoom-btn:hover{background:#334155}
+#zoom-level{background:#1e293b;color:#93c5fd;font-size:11px;font-weight:700;text-align:center;padding:3px 0;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.4)}
+#place-banner{display:none;position:absolute;top:8px;left:50%;transform:translateX(-50%);background:#1e40af;color:#fff;padding:6px 18px;border-radius:20px;font-size:12px;font-weight:700;z-index:100;pointer-events:none;white-space:nowrap}
+#place-banner.visible{display:block}
+
+#table-view{flex:1;overflow:auto;padding:18px;display:none}
+#table-view.visible{display:block}
+#filter-bar{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+.fbtn{padding:4px 11px;border-radius:20px;border:1.5px solid #334155;background:transparent;color:#64748b;font-size:12px;font-weight:600;cursor:pointer}
+.fbtn.active{color:#f1f5f9}
+#data-table{width:100%;border-collapse:collapse;font-size:13px}
+#data-table th{padding:9px 10px;text-align:left;color:#94a3b8;font-weight:700;border-bottom:1px solid #334155;background:#1e293b}
+#data-table td{padding:8px 10px;border-bottom:1px solid #1e293b;vertical-align:middle}
+#data-table tr.trow:hover td{background:#1e293b;cursor:pointer}
+.status-badge{border-radius:12px;padding:3px 9px;font-size:11px;font-weight:700;color:#fff}
+.thumb-tiny{width:28px;height:28px;object-fit:cover;border-radius:4px;border:1px solid #334155;cursor:pointer}
+
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:20000;align-items:center;justify-content:center}
+.modal-bg.open{display:flex}
+.modal-box{background:#fff;border-radius:12px;padding:24px;width:90%;max-width:520px;box-shadow:0 20px 60px rgba(0,0,0,.4);max-height:93vh;overflow-y:auto;color:#0f172a}
+.modal-box h2{margin-bottom:14px;font-size:17px}
+.field{margin-bottom:10px}
+.field label{font-size:11px;font-weight:700;color:#6b7280;display:block;margin-bottom:3px}
+.field input,.field select,.field textarea{width:100%;padding:7px 10px;border:1.5px solid #d1d5db;border-radius:7px;font-size:13px;background:#fff;color:#0f172a}
+.field input[type=range]{padding:4px 0;border:none}
+.field textarea{resize:vertical}
+.row2{display:flex;gap:10px}
+.row2 .field{flex:1}
+.row3{display:flex;gap:8px}
+.row3 .field{flex:1}
+.modal-actions{display:flex;gap:8px;margin-top:10px}
+.btn-cancel{flex:1;padding:9px;border:1.5px solid #d1d5db;border-radius:7px;background:#fff;font-weight:600;color:#374151;cursor:pointer}
+.btn-primary{flex:1;padding:9px;border:none;border-radius:7px;background:#e30613;color:#fff;font-weight:700;cursor:pointer}
+.btn-blue{padding:9px 16px;border:none;border-radius:7px;background:#1e40af;color:#fff;font-weight:700;cursor:pointer}
+.btn-del{padding:9px 12px;border:none;border-radius:7px;background:#fee2e2;color:#ef4444;font-weight:700;cursor:pointer}
+.status-btns{display:flex;gap:6px;flex-wrap:wrap}
+.sbtn{padding:5px 11px;border-radius:14px;border:2px solid #d1d5db;background:#fff;color:#374151;font-size:12px;font-weight:600;cursor:pointer}
+.sbtn.active{color:#fff}
+
+/* form type toggle */
+.type-toggle{display:flex;border:1.5px solid #d1d5db;border-radius:8px;overflow:hidden;margin-bottom:12px}
+.ttbtn{flex:1;padding:8px;border:none;background:#f9fafb;color:#374151;font-size:13px;font-weight:600;cursor:pointer}
+.ttbtn.active{background:#1e40af;color:#fff}
+
+/* shape picker */
+.shape-grid{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+.shape-opt{width:44px;height:44px;border:2px solid #d1d5db;border-radius:8px;background:#f9fafb;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.shape-opt.active{border-color:#1e40af;background:#eff6ff}
+.shape-opt svg{width:28px;height:28px}
+
+/* size classes */
+.size-grid{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.size-opt{padding:5px 12px;border:2px solid #d1d5db;border-radius:8px;background:#f9fafb;cursor:pointer;font-size:12px;font-weight:700;color:#374151}
+.size-opt.active{border-color:#1e40af;background:#eff6ff;color:#1e40af}
+
+/* slider row */
+.slider-row{display:flex;align-items:center;gap:10px}
+.slider-row input[type=range]{flex:1}
+.slider-val{min-width:30px;text-align:right;font-size:13px;font-weight:700;color:#374151}
+
+/* preview canvas */
+#shape-preview-wrap{background:#f1f5f9;border-radius:8px;padding:10px;display:flex;justify-content:center;margin-bottom:10px}
+#shape-preview{display:block}
+
+/* image upload */
+.img-upload-area{border:2px dashed #d1d5db;border-radius:8px;padding:14px;text-align:center;cursor:pointer;color:#9ca3af;font-size:13px}
+.img-upload-area:hover{border-color:#1e40af;color:#1e40af}
+.img-grid{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.img-thumb{position:relative;width:68px;height:68px}
+.img-thumb img{width:68px;height:68px;object-fit:cover;border-radius:6px;border:1.5px solid #d1d5db;cursor:pointer}
+.img-thumb .del-img{position:absolute;top:-5px;right:-5px;width:18px;height:18px;border-radius:50%;background:#ef4444;color:#fff;border:none;font-size:11px;line-height:18px;text-align:center;cursor:pointer;padding:0}
+
+/* SETTINGS */
+#modal-settings .modal-box{max-width:540px}
+.settings-tabs{display:flex;border-bottom:1px solid #e5e7eb;margin-bottom:16px;gap:0}
+.stab{background:none;border:none;border-bottom:2px solid transparent;color:#6b7280;padding:8px 16px;font-weight:600;font-size:13px;cursor:pointer}
+.stab.active{border-bottom-color:#1e40af;color:#1e40af}
+.stab-panel{display:none}
+.stab-panel.active{display:block}
+.settings-section{margin-bottom:16px}
+.settings-section h3{font-size:12px;font-weight:700;color:#374151;margin-bottom:7px;padding-bottom:3px;border-bottom:1px solid #e5e7eb}
+.tag-list{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:7px}
+.tag{display:flex;align-items:center;gap:4px;background:#f1f5f9;border:1px solid #d1d5db;border-radius:14px;padding:3px 10px;font-size:12px;color:#374151}
+.tag .rm{background:none;border:none;color:#9ca3af;cursor:pointer;font-size:14px;padding:0 0 0 2px}
+.tag .rm:hover{color:#ef4444}
+.add-tag-row{display:flex;gap:6px}
+.add-tag-row input{flex:1;padding:6px 10px;border:1.5px solid #d1d5db;border-radius:7px;font-size:13px}
+.add-tag-row button{padding:6px 12px;border:none;border-radius:7px;background:#1e40af;color:#fff;font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap}
+.status-edit-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:6px 8px;background:#f9fafb;border-radius:7px}
+.status-edit-row .sc{width:24px;height:24px;border-radius:50%;border:none;cursor:pointer;flex-shrink:0}
+.status-edit-row .sn{flex:1;padding:5px 8px;border:1.5px solid #d1d5db;border-radius:6px;font-size:13px}
+.status-edit-row .sdel{background:none;border:none;color:#9ca3af;cursor:pointer;font-size:16px}
+/* shape settings */
+.shape-def-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:6px 8px;background:#f9fafb;border-radius:7px}
+.shape-def-row .sicon{width:32px;height:32px;flex-shrink:0}
+.shape-def-row .sname{flex:1;font-size:13px;font-weight:600;color:#374151}
+.shape-def-row .sdel{background:none;border:none;color:#9ca3af;cursor:pointer;font-size:16px}
+/* size class settings */
+.sizeclass-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:6px 8px;background:#f9fafb;border-radius:7px}
+.sizeclass-row .sc-name{flex:1;font-size:13px;font-weight:600}
+.sizeclass-row .sc-val{width:60px;padding:4px 8px;border:1.5px solid #d1d5db;border-radius:6px;font-size:13px}
+.sizeclass-row .sdel{background:none;border:none;color:#9ca3af;cursor:pointer;font-size:16px}
+
+#lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:9000;align-items:center;justify-content:center;cursor:zoom-out}
+#lightbox.open{display:flex}
+#lightbox img{max-width:90vw;max-height:90vh;border-radius:8px}
+.km-hint{font-size:11px;color:#6b7280;margin-top:3px}
+
+/* ── PROJECT DASHBOARD ── */
+#project-screen{position:fixed;inset:0;background:#0f172a;z-index:10000;display:flex;flex-direction:column;overflow:auto}
+#project-screen.hidden{display:none}
+#ps-header{background:linear-gradient(135deg,#1e3a5f,#0f2d4a);border-bottom:2px solid #e30613;padding:0 28px;display:flex;align-items:center;gap:14px;height:60px;flex-shrink:0}
+#ps-header h1{font-size:18px;font-weight:800;color:#f1f5f9}
+#ps-header span{font-size:12px;color:#64748b}
+#ps-new-btn{margin-left:auto;background:#e30613;color:#fff;border:none;border-radius:8px;padding:8px 20px;font-weight:700;font-size:13px;cursor:pointer}
+#ps-body{flex:1;padding:28px;max-width:1200px;width:100%;margin:0 auto}
+#ps-empty{text-align:center;padding:80px 20px;color:#475569}
+#ps-empty .ps-eicon{font-size:64px;margin-bottom:16px}
+#ps-empty h2{font-size:20px;color:#64748b;margin-bottom:8px}
+#ps-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px}
+.ps-card{background:#1e293b;border-radius:14px;border:1.5px solid #334155;padding:20px;cursor:pointer;transition:border-color .2s,transform .15s;position:relative}
+.ps-card:hover{border-color:#e30613;transform:translateY(-2px)}
+.ps-card-header{display:flex;align-items:flex-start;gap:10px;margin-bottom:12px}
+.ps-card-icon{width:42px;height:42px;border-radius:10px;background:#0f172a;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
+.ps-card-title{font-size:15px;font-weight:800;color:#f1f5f9;line-height:1.2}
+.ps-card-nr{font-size:11px;color:#64748b;margin-top:2px}
+.ps-card-meta{font-size:11px;color:#64748b;margin-bottom:12px;display:flex;flex-direction:column;gap:3px}
+.ps-card-meta span{display:flex;align-items:center;gap:6px}
+.ps-progress-wrap{height:6px;background:#0f172a;border-radius:6px;margin-bottom:6px;overflow:hidden}
+.ps-progress-bar{height:6px;border-radius:6px;background:#e30613;transition:width .4s}
+.ps-progress-label{font-size:10px;color:#64748b;display:flex;justify-content:space-between}
+.ps-card-footer{display:flex;align-items:center;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid #334155}
+.ps-status-badge{border-radius:10px;padding:2px 10px;font-size:11px;font-weight:700;color:#fff}
+.ps-open-btn{margin-left:auto;background:#1e40af;color:#fff;border:none;border-radius:7px;padding:5px 14px;font-size:12px;font-weight:700;cursor:pointer}
+.ps-del-btn{background:none;border:none;color:#475569;cursor:pointer;font-size:16px;padding:2px 6px;border-radius:6px}
+.ps-del-btn:hover{background:#1e293b;color:#ef4444}
+
+/* new project modal */
+#modal-new-project .modal-box{max-width:500px}
+</style>
+</head>
+<body>
+
+<!-- ── PROJECT DASHBOARD ── -->
+<div id="project-screen">
+  <div id="ps-header">
+    <div style="font-size:28px">📐</div>
+    <div>
+      <h1>Bauplanmanager</h1>
+      <span>Projektübersicht</span>
+    </div>
+    <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+      <button onclick="importProject()" style="background:#334155;color:#94a3b8;border:none;border-radius:8px;padding:8px 16px;font-weight:700;font-size:12px;cursor:pointer">⬆ Projekt importieren</button>
+      <input type="file" id="import-file-input" accept=".json" style="display:none"/>
+      <button id="ps-new-btn" onclick="openNewProjectModal()">＋ Neues Projekt</button>
+    </div>
+  </div>
+  <div id="ps-body">
+    <div id="ps-empty" style="display:none">
+      <div class="ps-eicon">📋</div>
+      <h2>Noch keine Projekte</h2>
+      <p style="margin-bottom:20px">Lege dein erstes Projekt an um loszulegen.</p>
+      <button id="ps-new-btn2" onclick="openNewProjectModal()" style="background:#e30613;color:#fff;border:none;border-radius:8px;padding:10px 24px;font-weight:700;font-size:14px;cursor:pointer">＋ Erstes Projekt anlegen</button>
+    </div>
+    <div id="ps-grid"></div>
+  </div>
+</div>
+
+<!-- NEW PROJECT MODAL -->
+<div class="modal-bg" id="modal-new-project">
+  <div class="modal-box">
+    <h2>📋 Neues Projekt</h2>
+    <div class="row2">
+      <div class="field"><label>Projektname *</label><input id="np-name" placeholder="z.B. Streckenausbau Nord"/></div>
+      <div class="field"><label>Projektnummer</label><input id="np-nummer" placeholder="z.B. 2024-001"/></div>
+    </div>
+    <div class="field"><label>Auftraggeber</label><input id="np-auftraggeber" placeholder="z.B. DB Netz AG"/></div>
+    <div class="field"><label>Strecke / Ort</label><input id="np-strecke" placeholder="z.B. Stuttgart – Karlsruhe, km 12–18"/></div>
+    <div class="row2">
+      <div class="field"><label>Startdatum</label><input id="np-datum" type="date"/></div>
+      <div class="field"><label>Status</label>
+        <select id="np-status" style="width:100%;padding:7px 10px;border:1.5px solid #d1d5db;border-radius:7px;font-size:13px">
+          <option value="planung">📋 Planung</option>
+          <option value="aktiv">🔨 Aktiv</option>
+          <option value="pause">⏸ Pause</option>
+          <option value="abgeschlossen">✅ Abgeschlossen</option>
+        </select>
+      </div>
+    </div>
+    <div class="field"><label>Beschreibung</label><textarea id="np-beschreibung" rows="2" placeholder="Kurzbeschreibung des Projekts…"></textarea></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="np-cancel">Abbrechen</button>
+      <button class="btn-primary" id="np-submit">Projekt anlegen</button>
+    </div>
+  </div>
+</div>
+
+<div id="header">
+  <h1>Bauplanmanager</h1>
+  <button id="btn-back-projects" title="Zurück zur Projektübersicht" style="background:#334155;color:#94a3b8;border:none;border-radius:7px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">← Projekte</button>
+  <span id="header-project-name" style="font-size:13px;color:#93c5fd;font-weight:600;cursor:pointer" onclick="if(activeProjectId)openEditProjectModal(activeProjectId)" title="Projekt bearbeiten">✏️ </span>
+  <button id="btn-refresh" title="Neu laden von Cloud" style="background:#334155;color:#94a3b8;border:none;border-radius:7px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">⟳ Aktualisieren</button>
+  <button id="btn-export-project" title="Projekt als JSON exportieren" style="background:#334155;color:#94a3b8;border:none;border-radius:7px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">⬇ Exportieren</button>
+  <div style="flex:1"></div>
+  <div id="km-nav" style="display:none">
+    <span id="km-from">–</span>
+    <input type="range" id="km-slider" min="0" max="100" value="0"/>
+    <span id="km-to">–</span>
+  </div>
+  <div id="km-badge" style="display:none"></div>
+  <button class="hbtn" id="btn-settings" title="Einstellungen">⚙️</button>
+  <button class="hbtn" id="btn-upload">+ Plan hochladen</button>
+</div>
+
+<div id="layout">
+  <button id="sidebar-toggle" title="Seitenleiste ein/ausblenden">◀</button>
+  <div id="sidebar">
+    <div id="sidebar-label">PLÄNE</div>
+    <div id="plan-list"></div>
+    <div id="stats">
+      <div id="stats-label">GESAMT</div>
+      <div id="stats-rows"></div>
+    </div>
+  </div>
+  <div id="main">
+    <div id="empty">
+      <div class="eicon">📐</div>
+      <div class="etitle">Kein Plan ausgewählt</div>
+      <div class="esub">Lade einen PDF-Ausführungsplan hoch.</div>
+      <button class="ebtn" id="btn-upload2">+ Plan hochladen</button>
+    </div>
+    <div id="tabs" style="display:none">
+      <button class="tab active" data-tab="plan">📐 Plan</button>
+      <button class="tab" data-tab="tabelle">📋 Tabelle</button>
+      <button class="tab" data-tab="uebersicht">📊 Übersicht</button>
+      <button class="tab" data-tab="dashboard">📈 Dashboard</button>
+      <span id="tab-hint"></span>
+      <button id="tab-add">＋ Bauteil anlegen</button>
+      <button id="btn-move-mode" style="background:#334155;color:#94a3b8;border:none;border-radius:7px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0">✥ Verschieben</button>
+      <button id="btn-combine-mode" style="background:#334155;color:#94a3b8;border:none;border-radius:7px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0">⛓ Kombinieren</button>
+      <button id="btn-toggle-labels" style="background:#1e40af;color:#fff;border:none;border-radius:7px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0">🏷 Namen</button>
+    </div>
+    <div id="plan-view">
+      <div id="place-banner"></div>
+      <div id="move-banner" style="display:none;position:absolute;top:8px;left:50%;transform:translateX(-50%);background:#d97706;color:#fff;padding:6px 18px;border-radius:20px;font-size:12px;font-weight:700;z-index:100;pointer-events:none;white-space:nowrap">✥ Bauteil anklicken zum Verschieben — ESC zum Abbrechen</div>
+      <div id="combine-banner" style="display:none;position:absolute;top:8px;left:50%;transform:translateX(-50%);background:#7c3aed;color:#fff;padding:6px 18px;border-radius:20px;font-size:12px;font-weight:700;z-index:100;pointer-events:none;white-space:nowrap">⛓ Linien anklicken zum Auswählen — dann "Kombinieren" klicken</div>
+      <div id="pdf-wrap">
+        <canvas id="pdf-canvas"></canvas>
+        <div id="overlay"></div>
+      </div>
+      <div id="zoom-controls">
+        <button class="zoom-btn" id="zoom-in" title="Zoom ein (+)">＋</button>
+        <div id="zoom-level">100%</div>
+        <button class="zoom-btn" id="zoom-out" title="Zoom aus (-)">－</button>
+        <button class="zoom-btn" id="zoom-reset" title="Zurücksetzen" style="font-size:13px">⊙</button>
+      </div>
+    </div>
+    <div id="table-view">
+      <div id="filter-bar"></div>
+      <div id="table-container"></div>
+    </div>
+    <div id="uebersicht-view" style="display:none;flex:1;overflow:auto;padding:18px">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+        <div style="font-size:15px;font-weight:800;color:#f1f5f9">📊 Gesamtübersicht aller Pläne</div>
+        <div id="uebersicht-count" style="font-size:12px;color:#64748b"></div>
+        <div style="flex:1"></div>
+        <button id="btn-export-excel" style="background:#22c55e;color:#fff;border:none;border-radius:8px;padding:8px 18px;font-weight:700;font-size:13px;cursor:pointer">⬇ Excel exportieren</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <input id="uebersicht-search" placeholder="🔍 Suchen…" style="padding:6px 12px;border:1.5px solid #334155;border-radius:8px;background:#1e293b;color:#f1f5f9;font-size:13px;width:220px"/>
+        <select id="uebersicht-filter-plan" style="padding:6px 10px;border:1.5px solid #334155;border-radius:8px;background:#1e293b;color:#f1f5f9;font-size:13px">
+          <option value="">Alle Pläne</option>
+        </select>
+        <select id="uebersicht-filter-typ" style="padding:6px 10px;border:1.5px solid #334155;border-radius:8px;background:#1e293b;color:#f1f5f9;font-size:13px">
+          <option value="">Alle Typen</option>
+        </select>
+        <select id="uebersicht-filter-status" style="padding:6px 10px;border:1.5px solid #334155;border-radius:8px;background:#1e293b;color:#f1f5f9;font-size:13px">
+          <option value="">Alle Status</option>
+        </select>
+      </div>
+      <div id="uebersicht-container"></div>
+    </div>
+    <div id="dashboard-view" style="display:none;flex:1;overflow:auto;padding:18px;flex-direction:column;gap:16px">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:4px">
+        <div style="font-size:15px;font-weight:800;color:#f1f5f9">📈 Soll-Ist-Vergleich</div>
+        <div id="dashboard-plan-info" style="font-size:12px;color:#64748b"></div>
+        <div style="flex:1"></div>
+        <button id="btn-export-dashboard" style="background:#1e40af;color:#fff;border:none;border-radius:8px;padding:7px 16px;font-weight:700;font-size:12px;cursor:pointer">⬇ PDF exportieren</button>
+      </div>
+      <!-- Gesamtfortschritt -->
+      <div id="db-gesamt" style="background:#1e293b;border-radius:12px;padding:16px;border:1.5px solid #334155"></div>
+      <!-- Typ-Vergleich -->
+      <div id="db-typen" style="display:flex;flex-direction:column;gap:10px"></div>
+      <!-- Status-Übersicht -->
+      <div id="db-status" style="background:#1e293b;border-radius:12px;padding:16px;border:1.5px solid #334155"></div>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT PLAN MODAL -->
+<div class="modal-bg" id="modal-edit-plan">
+  <div class="modal-box" style="max-width:400px">
+    <h2>✏️ Plan bearbeiten</h2>
+    <div class="field"><label>Plan-Name</label><input id="ep-name" placeholder="Plan-Name"/></div>
+    <div class="row2">
+      <div class="field"><label>Von km</label><input id="ep-km-start" placeholder="12+400"/></div>
+      <div class="field"><label>Bis km</label><input id="ep-km-end" placeholder="12+800"/></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-del" id="ep-del">🗑 Plan löschen</button>
+      <button class="btn-cancel" id="ep-cancel">Abbrechen</button>
+      <button class="btn-primary" id="ep-save">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- UPLOAD MODAL -->
+<div class="modal-bg" id="modal-upload">
+  <div class="modal-box">
+    <h2>📄 Plan hochladen</h2>
+    <div class="field"><label>PDF-Datei</label><input type="file" id="up-file" accept=".pdf"/>
+      <div id="up-filename" style="font-size:11px;color:#22c55e;margin-top:4px"></div></div>
+    <div class="field"><label>Plan-Name</label><input id="up-name" placeholder="wird automatisch übernommen"/></div>
+    <div class="row2">
+      <div class="field"><label>Von km</label><input id="up-km-start" placeholder="12+400"/></div>
+      <div class="field"><label>Bis km</label><input id="up-km-end" placeholder="12+800"/></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="up-cancel">Abbrechen</button>
+      <button class="btn-primary" id="up-submit">Hochladen</button>
+    </div>
+  </div>
+</div>
+
+<!-- BAUTEIL MODAL -->
+<div class="modal-bg" id="modal-bauteil">
+  <div class="modal-box">
+    <h2 id="bf-title">➕ Neues Bauteil</h2>
+
+    <!-- TYP AUSWAHL (oben) -->
+    <div class="field" id="typ-select-wrap">
+      <label>Typ</label>
+      <select id="bf-typ-sel" style="width:100%;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:7px;font-size:14px;font-weight:600"></select>
+    </div>
+    <div class="field" id="bf-lvpos-wrap" style="display:none">
+      <label>LV-POS</label>
+      <input id="bf-lvpos" readonly style="background:#f1f5f9;color:#374151;font-weight:600;border:1.5px solid #e5e7eb;border-radius:7px;padding:7px 10px;width:100%;font-size:13px"/>
+    </div>
+    <div class="field" id="bf-ep-wrap" style="display:none">
+      <label>Einheitspreis</label>
+      <input id="bf-ep" readonly style="background:#f1f5f9;color:#374151;font-weight:600;border:1.5px solid #e5e7eb;border-radius:7px;padding:7px 10px;width:100%;font-size:13px"/>
+    </div>
+
+    <div class="field"><label>Name *</label><input id="bf-name" placeholder="z.B. Kabelkanal 1"/></div>
+
+    <div id="km-punkt-wrap">
+      <div class="field"><label>Kilometer</label><input id="bf-km" placeholder="12+540"/><div class="km-hint">Lage in Streckenkilometer</div></div>
+    </div>
+    <div id="km-linie-wrap" style="display:none">
+      <div class="row2">
+        <div class="field"><label>Von km</label><input id="bf-km-start" placeholder="12+400"/></div>
+        <div class="field"><label>Bis km</label><input id="bf-km-end" placeholder="12+800"/></div>
+      </div>
+    </div>
+
+    <div class="row2">
+      <div class="field"><label>Bauteilnummer <span style="font-size:10px;color:#9ca3af">(autom.)</span></label><input id="bf-nummer" placeholder="wird automatisch vergeben" readonly style="background:#f9fafb;color:#6b7280"/></div>
+      <div class="field"><label>Datum</label><input id="bf-datum" type="date"/></div>
+    </div>
+
+    <div class="row3">
+      <div class="field"><label>Soll-Menge</label><input id="bf-soll-plan" placeholder="0" type="number" min="0" step="any"/></div>
+      <div class="field"><label>Ist-Menge</label><input id="bf-soll" placeholder="0" type="number" min="0" step="any"/></div>
+      <div class="field"><label>Einheit</label><select id="bf-einheit-sel"></select></div>
+    </div>
+
+    <div id="custom-fields-wrap"></div>
+    <div class="field"><label>Status</label><div class="status-btns" id="status-btns"></div></div>
+    <div class="field">
+      <label>Bilder</label>
+      <div class="img-upload-area" id="img-drop">📷 Klicken oder Bilder hierher ziehen</div>
+      <input type="file" id="img-file-input" accept="image/*" multiple style="display:none"/>
+      <div class="img-grid" id="img-preview"></div>
+    </div>
+    <div class="field"><label>Notizen</label><textarea id="bf-notizen" rows="2" placeholder="Optionale Bemerkungen…"></textarea></div>
+    <div class="modal-actions">
+      <button class="btn-del" id="bf-del" style="display:none">🗑 Löschen</button>
+      <button class="btn-cancel" id="bf-cancel">Abbrechen</button>
+      <button class="btn-primary" id="bf-submit">Weiter → Platzieren</button>
+    </div>
+  </div>
+</div>
+
+<!-- SETTINGS MODAL -->
+<div class="modal-bg" id="modal-settings">
+  <div class="modal-box">
+    <h2>⚙️ Einstellungen</h2>
+    <div class="settings-tabs">
+      <button class="stab active" data-sp="allgemein">Allgemein</button>
+      <button class="stab" data-sp="gruppen">Gruppen</button>
+      <button class="stab" data-sp="formen">Formen</button>
+      <button class="stab" data-sp="status">Status</button>
+      <button class="stab" data-sp="felder">Eigene Felder</button>
+    </div>
+
+    <!-- Allgemein -->
+    <div class="stab-panel active" id="sp-allgemein">
+      <div class="settings-section">
+        <h3>Bauteil-Typen</h3>
+        <p style="font-size:12px;color:#6b7280;margin-bottom:10px">Definiere Typen mit Kürzel, Darstellung und ob Punkt oder Linie.</p>
+        <div id="typen-list"></div>
+        <div style="border:1.5px solid #d1d5db;border-radius:8px;padding:10px;margin-top:8px;background:#f9fafb">
+          <div style="font-size:11px;font-weight:700;color:#374151;margin-bottom:8px">Neuer Typ</div>
+          <div class="row2">
+            <div class="field"><label>Name</label><input id="new-typ-name" placeholder="z.B. Weiche"/></div>
+            <div class="field"><label>Kürzel</label><input id="new-typ-kuerzel" placeholder="z.B. W" style="text-transform:uppercase"/></div>
+          </div>
+          <div class="field"><label>LV-POS</label><input id="new-typ-lvpos" placeholder="z.B. 1.2.3.4"/></div>
+          <div class="row2">
+            <div class="field"><label>Art</label>
+              <select id="new-typ-formtype" style="width:100%;padding:7px 10px;border:1.5px solid #d1d5db;border-radius:7px;font-size:13px" onchange="toggleNewTypOpts()">
+                <option value="punkt">● Punkt</option>
+                <option value="linie">─ Linie</option>
+              </select>
+            </div>
+            <div class="field"><label>Standard-Einheit</label>
+              <select id="new-typ-einheit" style="width:100%;padding:7px 10px;border:1.5px solid #d1d5db;border-radius:7px;font-size:13px"></select>
+            </div>
+          </div>
+          <div class="field"><label>Einheitspreis (€)</label><input id="new-typ-ep" type="number" min="0" step="0.01" placeholder="z.B. 45.00" style="width:100%"/></div>
+          <!-- Punkt-spezifisch -->
+          <div id="new-typ-punkt-opts">
+            <div class="field"><label>Form</label>
+              <select id="new-typ-shape" style="width:100%;padding:7px 10px;border:1.5px solid #d1d5db;border-radius:7px;font-size:13px">
+                <option value="circle">● Kreis</option>
+                <option value="square">■ Quadrat</option>
+                <option value="triangle">▲ Dreieck</option>
+                <option value="diamond">◆ Raute</option>
+                <option value="star">★ Stern</option>
+                <option value="cross">✚ Kreuz</option>
+                <option value="hexagon">⬡ Sechseck</option>
+                <option value="pentagon">⬠ Fünfeck</option>
+              </select>
+            </div>
+            <div class="field"><label>Größe (px) <span id="new-typ-size-val">20</span></label>
+              <input type="range" id="new-typ-size" min="10" max="80" value="20" style="width:100%" oninput="document.getElementById('new-typ-size-val').textContent=this.value"/>
+            </div>
+          </div>
+          <!-- Linie-spezifisch -->
+          <div id="new-typ-linie-opts" style="display:none">
+            <div class="field"><label>Linienstil</label>
+              <select id="new-typ-linestyle" style="width:100%;padding:7px 10px;border:1.5px solid #d1d5db;border-radius:7px;font-size:13px">
+                <option value="solid">─── Durchgehend</option>
+                <option value="dashed">- - - Gestrichelt</option>
+                <option value="dotted">··· Gepunktet</option>
+                <option value="dashdot">-·- Strich-Punkt</option>
+              </select>
+            </div>
+            <div class="field"><label>Dicke (px) <span id="new-typ-thick-val">4</span></label>
+              <input type="range" id="new-typ-thick" min="1" max="20" value="4" style="width:100%" oninput="document.getElementById('new-typ-thick-val').textContent=this.value"/>
+            </div>
+          </div>
+          <button id="add-typ-btn" style="width:100%;padding:8px;border:none;border-radius:7px;background:#1e40af;color:#fff;font-weight:700;font-size:13px;cursor:pointer">＋ Typ hinzufügen</button>
+        </div>
+      </div>
+      <div class="settings-section">
+        <h3>Einheiten</h3>
+        <div class="tag-list" id="einheiten-list"></div>
+        <div class="add-tag-row"><input id="new-einheit" placeholder="Neue Einheit…"/><button id="add-einheit-btn">＋ Hinzufügen</button></div>
+      </div>
+    </div>
+
+    <!-- Formen -->
+    <div class="stab-panel" id="sp-formen">
+      <div class="settings-section">
+        <h3>Punkt-Formen</h3>
+        <p style="font-size:12px;color:#6b7280;margin-bottom:10px">Formen stehen beim Bauteil anlegen zur Auswahl zur Verfügung.</p>
+        <div id="shape-defs-list"></div>
+        <div class="add-tag-row" style="margin-top:8px">
+          <select id="new-shape-type" style="padding:6px 8px;border:1.5px solid #d1d5db;border-radius:7px;font-size:13px">
+            <option value="circle">● Kreis</option>
+            <option value="square">■ Quadrat</option>
+            <option value="triangle">▲ Dreieck</option>
+            <option value="diamond">◆ Raute</option>
+            <option value="star">★ Stern</option>
+            <option value="cross">✚ Kreuz</option>
+            <option value="hexagon">⬡ Sechseck</option>
+            <option value="pentagon">⬠ Fünfeck</option>
+          </select>
+          <input id="new-shape-name" placeholder="Bezeichnung…" style="flex:1"/>
+          <button id="add-shape-btn">＋</button>
+        </div>
+      </div>
+      <div class="settings-section">
+        <h3>Linien-Stile</h3>
+        <div id="linestyle-defs-list"></div>
+        <div class="add-tag-row" style="margin-top:8px">
+          <select id="new-linestyle-type" style="padding:6px 8px;border:1.5px solid #d1d5db;border-radius:7px;font-size:13px">
+            <option value="solid">─── Durchgehend</option>
+            <option value="dashed">- - - Gestrichelt</option>
+            <option value="dotted">··· Gepunktet</option>
+            <option value="dashdot">-·- Strich-Punkt</option>
+          </select>
+          <input id="new-linestyle-name" placeholder="Bezeichnung…" style="flex:1"/>
+          <button id="add-linestyle-btn">＋</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Status -->
+    <div class="stab-panel" id="sp-status">
+      <div class="settings-section">
+        <h3>Status verwalten</h3>
+        <div id="status-edit-list"></div>
+        <div class="add-tag-row" style="margin-top:8px">
+          <input id="new-status-name" placeholder="Neuer Status…"/>
+          <input type="color" id="new-status-color" value="#6366f1" style="width:40px;height:34px;padding:2px;border:1px solid #d1d5db;border-radius:7px;cursor:pointer;flex:none"/>
+          <button id="add-status-btn">＋</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Eigene Felder -->
+    <!-- Gruppen -->
+    <div class="stab-panel" id="sp-gruppen">
+      <div class="settings-section">
+        <h3>Bauteilgruppen</h3>
+        <p style="font-size:12px;color:#6b7280;margin-bottom:12px">Fasse mehrere Bauteiltypen zu einer Gruppe zusammen. Im Dashboard und PDF werden Gruppen als Summe dargestellt.</p>
+        <div id="gruppen-list" style="margin-bottom:12px"></div>
+        <div style="border:1.5px solid #d1d5db;border-radius:8px;padding:10px;background:#f9fafb">
+          <div style="font-size:11px;font-weight:700;color:#374151;margin-bottom:8px">Neue Gruppe</div>
+          <div class="field"><label>Gruppenname</label><input id="new-gruppe-name" placeholder="z.B. Kabelkanal"/></div>
+          <div class="field">
+            <label>Bauteiltypen zuweisen</label>
+            <div id="gruppe-typ-checkboxes" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px"></div>
+          </div>
+          <button id="add-gruppe-btn" style="width:100%;padding:8px;border:none;border-radius:7px;background:#1e40af;color:#fff;font-weight:700;font-size:13px;cursor:pointer;margin-top:6px">＋ Gruppe hinzufügen</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="stab-panel" id="sp-felder">
+      <div class="settings-section">
+        <h3>Eigene Felder</h3>
+        <p style="font-size:12px;color:#6b7280;margin-bottom:10px">Füge beliebige zusätzliche Felder zum Bauteil-Formular hinzu (z.B. DIN-Norm, Verantwortlicher).</p>
+        <div class="tag-list" id="custom-fields-list"></div>
+        <div class="add-tag-row"><input id="new-custom-field" placeholder="Feldname…"/><button id="add-custom-field-btn">＋ Hinzufügen</button></div>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-primary" id="settings-close">Fertig</button>
+    </div>
+  </div>
+</div>
+
+<!-- KOMBINATION MODAL -->
+<div class="modal-bg" id="modal-combine">
+  <div class="modal-box" style="max-width:480px">
+    <h2>⛓ Linien kombinieren</h2>
+    <p style="font-size:13px;color:#6b7280;margin-bottom:14px">Ausgewählte Linien werden zu einem neuen kombinierten Bauteil zusammengefasst. Die Originallinien bleiben erhalten.</p>
+    <div id="combine-selected-list" style="margin-bottom:12px;max-height:160px;overflow-y:auto;border:1.5px solid #e5e7eb;border-radius:8px;padding:8px"></div>
+    <div class="field"><label>Name des kombinierten Bauteils *</label><input id="combine-name" placeholder="z.B. Kabelkanal Gesamt"/></div>
+    <div class="field"><label>Typ</label>
+      <select id="combine-typ" style="width:100%;padding:7px 10px;border:1.5px solid #d1d5db;border-radius:7px;font-size:13px"></select>
+    </div>
+    <div class="field"><label>Status</label>
+      <div class="status-btns" id="combine-status-btns"></div>
+    </div>
+    <div class="field"><label>Notizen</label><textarea id="combine-notizen" rows="2" placeholder="Optionale Bemerkungen…"></textarea></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="combine-cancel">Abbrechen</button>
+      <button class="btn-primary" id="combine-submit">⛓ Jetzt kombinieren</button>
+    </div>
+  </div>
+</div>
+
+<div id="lightbox"><img id="lightbox-img" src="" alt=""/><button onclick="document.getElementById('lightbox').classList.remove('open')" style="position:fixed;top:18px;right:24px;background:rgba(255,255,255,0.15);border:none;color:#fff;font-size:28px;line-height:1;cursor:pointer;border-radius:50%;width:44px;height:44px;display:flex;align-items:center;justify-content:center">✕</button></div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+// ── CONFIG ────────────────────────────────────────────────
+const defaultConfig={
+  bauteilTypen:[],
+  einheiten:['m','cm','mm','kg','t','Stk','m²','m³'],
+  status:{
+    offen:   {label:'Offen',    color:'#9ca3af'},
+    inarbeit:{label:'In Arbeit',color:'#f59e0b'},
+    fertig:  {label:'Fertig',   color:'#22c55e'},
+    problem: {label:'Problem',  color:'#ef4444'},
+    abrechnen:{label:'Abrechnen',color:'#8b5cf6',fixed:true},
+  },
+  customFields:[],
+  gruppen:[],
+  shapes:[
+    {id:'sh1', type:'circle',   name:'Kreis'},
+    {id:'sh2', type:'square',   name:'Quadrat'},
+    {id:'sh3', type:'triangle', name:'Dreieck'},
+    {id:'sh4', type:'diamond',  name:'Raute'},
+    {id:'sh5', type:'star',     name:'Stern'},
+    {id:'sh6', type:'cross',    name:'Kreuz'},
+  ],
+  lineStyles:[
+    {id:'ls1', type:'solid',   name:'Durchgehend'},
+    {id:'ls2', type:'dashed',  name:'Gestrichelt'},
+    {id:'ls3', type:'dotted',  name:'Gepunktet'},
+    {id:'ls4', type:'dashdot', name:'Strich-Punkt'},
+  ],
+  sizeClasses:[
+    {id:'sc1', name:'Klein',   px:14},
+    {id:'sc2', name:'Mittel',  px:22},
+    {id:'sc3', name:'Groß',    px:34},
+  ],
+};
+
+function getDefaultConfig(){return JSON.parse(JSON.stringify(defaultConfig));}
+let config=getDefaultConfig();
+
+// ── STATE ─────────────────────────────────────────────────
+let plans=[], activeId=null, uid=100;
+let editBid=null, filterStatus='alle';
+let upFileUrl=null;
+let bfStatus='offen', bfFormType='punkt';
+let bfShapeId='sh1', bfLineStyleId='ls1';
+let bfPtSize=20, bfLnThick=4, bfSizeClassId=null;
+let placeMode=null, pendingBauteil=null, lineStart=null;
+let moveMode=false, moveBid=null, moveEndpoint=null;
+let combineMode=false, combineSelected=new Set();
+let showLabels=true;
+let bfImages=[];
+let zoomLevel=1;
+const ZOOM_MIN=0.3, ZOOM_MAX=5, ZOOM_STEP=0.2;
+
+function applyZoom(){
+  document.getElementById('pdf-wrap').style.transform=`scale(${zoomLevel})`;
+  document.getElementById('zoom-level').textContent=Math.round(zoomLevel*100)+'%';
+}
+function zoomIn(){zoomLevel=Math.min(ZOOM_MAX,+(zoomLevel+ZOOM_STEP).toFixed(2));applyZoom();}
+function zoomOut(){zoomLevel=Math.max(ZOOM_MIN,+(zoomLevel-ZOOM_STEP).toFixed(2));applyZoom();}
+function zoomReset(){zoomLevel=1;applyZoom();}
+
+function nid(){return 'x'+(uid++);}
+function parseKm(s){return parseFloat((s||'').replace(',','.').replace('+','.'))||0;}
+function getSorted(){return [...plans].sort((a,b)=>a.ks-b.ks);}
+function activePlan(){return plans.find(p=>p.id===activeId)||null;}
+function allBauteile(){return plans.flatMap(p=>p.bauteile);}
+
+// ── DRAW SHAPE on canvas ──────────────────────────────────
+function drawShape(ctx, type, cx, cy, size, color){
+  ctx.fillStyle=color; ctx.strokeStyle='#fff'; ctx.lineWidth=2;
+  ctx.beginPath();
+  const r=size/2;
+  switch(type){
+    case 'circle':
+      ctx.arc(cx,cy,r,0,Math.PI*2); break;
+    case 'square':
+      ctx.rect(cx-r,cy-r,size,size); break;
+    case 'triangle':
+      ctx.moveTo(cx,cy-r); ctx.lineTo(cx+r,cy+r); ctx.lineTo(cx-r,cy+r); ctx.closePath(); break;
+    case 'diamond':
+      ctx.moveTo(cx,cy-r); ctx.lineTo(cx+r,cy); ctx.lineTo(cx,cy+r); ctx.lineTo(cx-r,cy); ctx.closePath(); break;
+    case 'star':{
+      const or=r, ir=r*0.45, pts=5;
+      for(let i=0;i<pts*2;i++){
+        const rad=((i*Math.PI)/pts)-(Math.PI/2);
+        const rr=i%2===0?or:ir;
+        if(i===0) ctx.moveTo(cx+rr*Math.cos(rad),cy+rr*Math.sin(rad));
+        else ctx.lineTo(cx+rr*Math.cos(rad),cy+rr*Math.sin(rad));
+      }
+      ctx.closePath(); break;}
+    case 'cross':{
+      const t=r*0.35;
+      ctx.rect(cx-t,cy-r,t*2,size);
+      ctx.rect(cx-r,cy-t,size,t*2); break;}
+    case 'hexagon':{
+      for(let i=0;i<6;i++){
+        const a=(Math.PI/3)*i-(Math.PI/6);
+        if(i===0) ctx.moveTo(cx+r*Math.cos(a),cy+r*Math.sin(a));
+        else ctx.lineTo(cx+r*Math.cos(a),cy+r*Math.sin(a));
+      }
+      ctx.closePath(); break;}
+    case 'pentagon':{
+      for(let i=0;i<5;i++){
+        const a=(2*Math.PI/5)*i-(Math.PI/2);
+        if(i===0) ctx.moveTo(cx+r*Math.cos(a),cy+r*Math.sin(a));
+        else ctx.lineTo(cx+r*Math.cos(a),cy+r*Math.sin(a));
+      }
+      ctx.closePath(); break;}
+    default:
+      ctx.arc(cx,cy,r,0,Math.PI*2);
+  }
+  ctx.fill();
+  if(type!=='cross'){ctx.stroke();}
+  else{ctx.fill();} // cross fill twice is fine
+}
+
+function shapeToSVG(type, size, color){
+  const c=document.createElement('canvas');
+  c.width=size; c.height=size;
+  drawShape(c.getContext('2d'),type,size/2,size/2,size*0.78,color||'#1e40af');
+  return c.toDataURL();
+}
+
+// ── PREVIEW ───────────────────────────────────────────────
+function updatePreview(){/* no-op: preview removed */}
+
+// ── RENDER MARKERS on overlay ─────────────────────────────
+function renderMarkers(){
+  const ap=activePlan(); if(!ap) return;
+  const ov=document.getElementById('overlay');
+  ov.innerHTML='';
+  ap.bauteile.forEach(b=>{
+    const col=config.status[b.status]?.color||'#9ca3af';
+    // combined multi-segment linie
+    if(b.combined&&b.segments){
+      const ls=config.lineStyles.find(s=>s.id===b.lineStyleId)||{type:'solid'};
+      const thick=b.lnThick||4;
+      const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+      svg.style.cssText='position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none';
+      b.segments.forEach(seg=>{
+        const ln=document.createElementNS('http://www.w3.org/2000/svg','line');
+        ln.setAttribute('x1',seg.x+'%');ln.setAttribute('y1',seg.y+'%');
+        ln.setAttribute('x2',seg.x2+'%');ln.setAttribute('y2',seg.y2+'%');
+        ln.setAttribute('stroke',col);ln.setAttribute('stroke-width',thick);ln.setAttribute('stroke-linecap','round');
+        if(ls.type==='dashed') ln.setAttribute('stroke-dasharray',(thick*4)+' '+(thick*2));
+        else if(ls.type==='dotted') ln.setAttribute('stroke-dasharray',thick+' '+(thick*2));
+        else if(ls.type==='dashdot') ln.setAttribute('stroke-dasharray',(thick*4)+' '+(thick*1.5)+' '+thick+' '+(thick*1.5));
+        svg.appendChild(ln);
+      });
+      ov.appendChild(svg);
+      // label + click at center of first segment
+      const cx=(b.segments[0].x+b.segments[b.segments.length-1].x2)/2;
+      const cy=(b.segments[0].y+b.segments[b.segments.length-1].y2)/2;
+      if(showLabels){
+        const lbl=document.createElement('div');
+        lbl.style.cssText=`position:absolute;left:${cx}%;top:${cy}%;transform:translate(-50%,-50%);background:rgba(124,58,237,.85);color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;white-space:nowrap;pointer-events:none;z-index:25`;
+        lbl.textContent='⛓ '+(b.nummer?b.nummer+' ':'')+b.name;
+        ov.appendChild(lbl);
+      }
+      const mid=document.createElement('div');
+      const isCombineSelected=combineMode&&combineSelected.has(b.id);
+      mid.style.cssText=`position:absolute;left:${cx}%;top:${cy}%;transform:translate(-50%,-50%);width:14px;height:14px;border-radius:50%;background:#7c3aed;border:2px solid #fff;cursor:pointer;z-index:20`;
+      mid.addEventListener('click',e=>{e.stopPropagation();if(!combineMode&&!moveMode)openEditBauteil(b.id);});
+      ov.appendChild(mid);
+      return;
+    }
+    if(b.formType==='linie'&&b.x2!==undefined){
+      const ls=config.lineStyles.find(s=>s.id===b.lineStyleId)||{type:'solid'};
+      const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+      svg.style.cssText='position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none';
+      const ln=document.createElementNS('http://www.w3.org/2000/svg','line');
+      ln.setAttribute('x1',b.x+'%');ln.setAttribute('y1',b.y+'%');
+      ln.setAttribute('x2',b.x2+'%');ln.setAttribute('y2',b.y2+'%');
+      ln.setAttribute('stroke',col);
+      ln.setAttribute('stroke-width',b.lnThick||4);
+      ln.setAttribute('stroke-linecap','round');
+      const thick=b.lnThick||4;
+      if(ls.type==='dashed') ln.setAttribute('stroke-dasharray',(thick*4)+' '+(thick*2));
+      else if(ls.type==='dotted') ln.setAttribute('stroke-dasharray',thick+' '+(thick*2));
+      else if(ls.type==='dashdot') ln.setAttribute('stroke-dasharray',(thick*4)+' '+(thick*1.5)+' '+thick+' '+(thick*1.5));
+      svg.appendChild(ln); ov.appendChild(svg);
+      if(showLabels){
+        const lbl=document.createElement('div');
+        lbl.style.cssText=`position:absolute;left:${(b.x+b.x2)/2}%;top:${(b.y+b.y2)/2}%;transform:translate(-50%,-50%);background:rgba(0,0,0,.65);color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;white-space:nowrap;pointer-events:none;z-index:25`;
+        lbl.textContent=(b.nummer?b.nummer+' ':'')+b.name;
+        ov.appendChild(lbl);
+      }
+      const mid=document.createElement('div');
+      const isMoveSelected=moveMode&&moveBid===b.id;
+      const isCombineSelected=combineMode&&combineSelected.has(b.id);
+      mid.style.cssText=`position:absolute;left:${(b.x+b.x2)/2}%;top:${(b.y+b.y2)/2}%;transform:translate(-50%,-50%);width:${isCombineSelected?18:12}px;height:${isCombineSelected?18:12}px;border-radius:50%;background:${isCombineSelected?'#7c3aed':col};border:${isCombineSelected?'3px':'2px'} solid #fff;cursor:${moveMode||combineMode?'pointer':'pointer'};z-index:20`;
+      mid.dataset.bid=b.id;
+      mid.addEventListener('click',e=>{
+        e.stopPropagation();
+        if(combineMode){toggleCombineSelect(b.id);}
+        else if(moveMode){selectMoveTarget(b.id,'whole');}
+        else{openEditBauteil(b.id);}
+      });
+      ov.appendChild(mid);
+      // Endpunkt-Anfasser
+      [['x','y','start'],['x2','y2','end']].forEach(([xk,yk,ep])=>{
+        const handle=document.createElement('div');
+        const isSelected=isMoveSelected&&moveEndpoint===ep;
+        handle.style.cssText=`position:absolute;left:${b[xk]}%;top:${b[yk]}%;transform:translate(-50%,-50%);width:${moveMode?16:8}px;height:${moveMode?16:8}px;border-radius:50%;background:${isSelected?'#f59e0b':col};border:${moveMode?'3px':'2px'} solid #fff;cursor:${moveMode?'crosshair':'default'};pointer-events:${moveMode?'all':'none'};z-index:22;transition:transform .1s`;
+        if(moveMode){
+          handle.title=ep==='start'?'Startpunkt verschieben':'Endpunkt verschieben';
+          handle.addEventListener('click',e=>{e.stopPropagation();selectMoveTarget(b.id,ep);});
+        }
+        ov.appendChild(handle);
+      });
+    } else {
+      // punkt: draw on small canvas
+      const shape=config.shapes.find(s=>s.id===b.shapeId)||config.shapes[0]||{type:'circle'};
+      const sz=b.ptSize||20;
+      const c=document.createElement('canvas');
+      c.width=sz+6; c.height=sz+6;
+      drawShape(c.getContext('2d'),shape.type,(sz+6)/2,(sz+6)/2,sz,col);
+      const img=document.createElement('img');
+      img.src=c.toDataURL();
+      img.style.cssText=`position:absolute;left:${b.x}%;top:${b.y}%;transform:translate(-50%,-50%);cursor:${moveMode?'grab':'pointer'};z-index:20;filter:drop-shadow(0 1px 4px rgba(0,0,0,.6))${moveBid===b.id?';outline:3px solid #f59e0b;border-radius:50%':''}`;
+      img.title=b.name;
+      img.dataset.bid=b.id;
+      img.addEventListener('click',e=>{
+        e.stopPropagation();
+        if(moveMode){selectMoveTarget(b.id);}
+        else{openEditBauteil(b.id);}
+      });
+      ov.appendChild(img);
+      if(showLabels){
+        const lbl=document.createElement('div');
+        lbl.style.cssText=`position:absolute;left:${b.x}%;top:${b.y}%;transform:translate(-50%,-200%);background:rgba(0,0,0,.65);color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;white-space:nowrap;pointer-events:none;z-index:25`;
+        lbl.textContent=(b.nummer?b.nummer+' ':'')+b.name;
+        ov.appendChild(lbl);
+      }
+    }
+  });
+}
+
+// ── PLACE MODE ────────────────────────────────────────────
+function enterPlaceMode(type,bauteil){
+  placeMode=type==='punkt'?'punkt':'linie-start';
+  pendingBauteil=bauteil; lineStart=null;
+  document.getElementById('overlay').classList.add('place-mode');
+  const banner=document.getElementById('place-banner');
+  banner.classList.add('visible');
+  banner.textContent=type==='punkt'?'📍 Klicke auf den Plan zum Platzieren':'📍 Klicke auf Startpunkt der Linie';
+  setActiveTab('plan');
+}
+function exitPlaceMode(){
+  placeMode=null;pendingBauteil=null;lineStart=null;
+  document.getElementById('overlay').classList.remove('place-mode');
+  document.getElementById('place-banner').classList.remove('visible');
+}
+// ── MOVE MODE ─────────────────────────────────────────────
+function enterMoveMode(){
+  moveMode=true; moveBid=null;
+  document.getElementById('overlay').classList.add('place-mode');
+  document.getElementById('move-banner').style.display='block';
+  document.getElementById('btn-move-mode').style.background='#d97706';
+  document.getElementById('btn-move-mode').style.color='#fff';
+  renderMarkers();
+}
+function exitMoveMode(){
+  moveMode=false; moveBid=null; moveEndpoint=null;
+  if(snapDot){snapDot.style.display='none';}
+  document.getElementById('overlay').classList.remove('place-mode');
+  document.getElementById('move-banner').style.display='none';
+  document.getElementById('btn-move-mode').style.background='#334155';
+  document.getElementById('btn-move-mode').style.color='#94a3b8';
+  renderMarkers();
+}
+function selectMoveTarget(bid, endpoint='whole'){
+  moveBid=bid; moveEndpoint=endpoint;
+  const label=endpoint==='start'?'Startpunkt':(endpoint==='end'?'Endpunkt':'Linie');
+  document.getElementById('move-banner').textContent=`✥ ${label} — jetzt auf neue Position klicken — ESC zum Abbrechen`;
+  renderMarkers();
+}
+
+// ── COMBINE MODE ──────────────────────────────────────────
+function enterCombineMode(){
+  combineMode=true; combineSelected=new Set();
+  document.getElementById('combine-banner').style.display='block';
+  document.getElementById('btn-combine-mode').style.background='#7c3aed';
+  document.getElementById('btn-combine-mode').style.color='#fff';
+  document.getElementById('btn-combine-mode').textContent='⛓ Fertig auswählen';
+  renderMarkers();
+}
+function exitCombineMode(){
+  combineMode=false; combineSelected=new Set();
+  document.getElementById('combine-banner').style.display='none';
+  document.getElementById('btn-combine-mode').style.background='#334155';
+  document.getElementById('btn-combine-mode').style.color='#94a3b8';
+  document.getElementById('btn-combine-mode').textContent='⛓ Kombinieren';
+  renderMarkers();
+}
+function toggleCombineSelect(bid){
+  if(combineSelected.has(bid)) combineSelected.delete(bid);
+  else combineSelected.add(bid);
+  const n=combineSelected.size;
+  document.getElementById('combine-banner').textContent=`⛓ ${n} Linie${n!==1?'n':''} ausgewählt — "Fertig auswählen" klicken`;
+  renderMarkers();
+}
+function openCombineModal(){
+  const ap=activePlan(); if(!ap) return;
+  const selected=[...combineSelected].map(id=>ap.bauteile.find(b=>b.id===id)).filter(Boolean);
+  if(selected.length<2){alert('Bitte mindestens 2 Linien auswählen.');return;}
+  // fill modal
+  document.getElementById('combine-selected-list').innerHTML=selected.map(b=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:4px 6px;border-bottom:1px solid #f3f4f6">
+      <span style="font-size:18px">─</span>
+      <span style="font-size:13px;font-weight:600">${b.nummer||''} ${b.name}</span>
+      <span style="font-size:11px;color:#9ca3af">${b.typ||''}</span>
+    </div>`).join('');
+  // suggest name from first selected
+  document.getElementById('combine-name').value=selected[0].name+' (kombiniert)';
+  // fill typ dropdown with linie types only
+  const linienTypen=config.bauteilTypen.filter(t=>t.formType==='linie');
+  document.getElementById('combine-typ').innerHTML=linienTypen.map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
+  if(selected[0].typId) document.getElementById('combine-typ').value=selected[0].typId;
+  // status buttons
+  let combineStatus='offen';
+  document.getElementById('combine-status-btns').innerHTML=Object.entries(config.status).map(([k,v])=>
+    `<button class="sbtn${k==='offen'?' active':''}" data-csk="${k}" style="${k==='offen'?`background:${v.color};border-color:${v.color}`:''}">
+    ${v.label}</button>`).join('');
+  document.querySelectorAll('.sbtn[data-csk]').forEach(el=>el.addEventListener('click',()=>{
+    combineStatus=el.dataset.csk;
+    document.querySelectorAll('.sbtn[data-csk]').forEach(b=>{
+      const v=config.status[b.dataset.csk];
+      b.classList.toggle('active',b.dataset.csk===combineStatus);
+      b.style.background=b.dataset.csk===combineStatus?v.color:'';
+      b.style.borderColor=b.dataset.csk===combineStatus?v.color:'';
+    });
+  }));
+  document.getElementById('combine-notizen').value='';
+  document.getElementById('modal-combine').classList.add('open');
+}
+
+document.getElementById('btn-combine-mode').addEventListener('click',()=>{
+  if(!combineMode){ enterCombineMode(); }
+  else { openCombineModal(); }
+});
+document.getElementById('combine-cancel').addEventListener('click',()=>{
+  document.getElementById('modal-combine').classList.remove('open');
+  exitCombineMode();
+});
+document.getElementById('modal-combine').addEventListener('click',e=>{
+  if(e.target===e.currentTarget){document.getElementById('modal-combine').classList.remove('open');exitCombineMode();}
+});
+document.getElementById('combine-submit').addEventListener('click',()=>{
+  const ap=activePlan(); if(!ap) return;
+  const name=document.getElementById('combine-name').value.trim();
+  if(!name){alert('Bitte einen Namen eingeben.');return;}
+  const selected=[...combineSelected].map(id=>ap.bauteile.find(b=>b.id===id)).filter(Boolean);
+  const typId=document.getElementById('combine-typ').value;
+  const typ=config.bauteilTypen.find(t=>t.id===typId);
+  const combineStatus=document.querySelector('.sbtn[data-csk].active')?.dataset.csk||'offen';
+  // build combined bauteil as multi-segment linie
+  const segments=selected.map(b=>({x:b.x,y:b.y,x2:b.x2,y2:b.y2}));
+  const newBauteil={
+    id:nid(),
+    name,
+    typId, typ:typ?.name||'',
+    nummer:autoNummer(typId),
+    formType:'linie',
+    combined:true,
+    segments,
+    // for rendering use first segment coords as anchor
+    x:segments[0].x, y:segments[0].y,
+    x2:segments[segments.length-1].x2, y2:segments[segments.length-1].y2,
+    lineStyleId:selected[0].lineStyleId||config.lineStyles[0]?.id,
+    lnThick:selected[0].lnThick||4,
+    status:combineStatus,
+    einheit:typ?.einheit||selected[0].einheit||'m',
+    notizen:document.getElementById('combine-notizen').value,
+    datum:new Date().toISOString().slice(0,10),
+    images:[],
+  };
+  ap.bauteile.push(newBauteil);
+  // Originallinien entfernen
+  const selectedIds=new Set([...combineSelected]);
+  ap.bauteile=ap.bauteile.filter(b=>!selectedIds.has(b.id)||b.id===newBauteil.id);
+  document.getElementById('modal-combine').classList.remove('open');
+  exitCombineMode();
+  render(); saveProjects();
+});
+
+document.getElementById('btn-toggle-labels').addEventListener('click',()=>{
+  showLabels=!showLabels;
+  const btn=document.getElementById('btn-toggle-labels');
+  btn.style.background=showLabels?'#1e40af':'#334155';
+  btn.style.color=showLabels?'#fff':'#94a3b8';
+  renderMarkers();
+});
+
+document.getElementById('btn-move-mode').addEventListener('click',()=>{
+  if(moveMode) exitMoveMode(); else enterMoveMode();
+});
+
+// ── SNAP TO ENDPOINT ──────────────────────────────────────
+const SNAP_THRESHOLD=3; // percent distance to snap
+function snapToEndpoint(x,y,excludeBid,ap){
+  let best=null, bestDist=SNAP_THRESHOLD;
+  ap.bauteile.forEach(b=>{
+    if(b.id===excludeBid||b.formType!=='linie') return;
+    [[b.x,b.y],[b.x2,b.y2]].forEach(([ex,ey])=>{
+      const dist=Math.sqrt((x-ex)**2+(y-ey)**2);
+      if(dist<bestDist){bestDist=dist;best={x:ex,y:ey};}
+    });
+  });
+  return best;
+}
+
+// snap preview dot on mousemove
+let snapDot=null;
+document.getElementById('overlay').addEventListener('mousemove',e=>{
+  if(!moveMode||!moveBid) return;
+  const b=activePlan()?.bauteile.find(b=>b.id===moveBid);
+  if(!b||b.formType!=='linie'||(moveEndpoint!=='start'&&moveEndpoint!=='end')) {
+    if(snapDot){snapDot.style.display='none';} return;
+  }
+  const r=document.getElementById('overlay').getBoundingClientRect();
+  const x=((e.clientX-r.left)/(r.width))*100, y=((e.clientY-r.top)/(r.height))*100;
+  const snapped=snapToEndpoint(x,y,moveBid,activePlan());
+  if(!snapDot){
+    snapDot=document.createElement('div');
+    snapDot.style.cssText='position:absolute;width:20px;height:20px;border-radius:50%;border:3px solid #22c55e;background:rgba(34,197,94,0.25);pointer-events:none;z-index:50;transform:translate(-50%,-50%);transition:opacity .1s';
+    document.getElementById('overlay').appendChild(snapDot);
+  }
+  if(snapped){
+    snapDot.style.display='block';
+    snapDot.style.left=snapped.x+'%';
+    snapDot.style.top=snapped.y+'%';
+  } else {
+    snapDot.style.display='none';
+  }
+});
+
+document.getElementById('overlay').addEventListener('click',e=>{
+  const r=document.getElementById('overlay').getBoundingClientRect();
+  const x=((e.clientX-r.left)/(r.width))*100, y=((e.clientY-r.top)/(r.height))*100;
+  const ap=activePlan(); if(!ap) return;
+
+  // move mode: place selected bauteil/endpoint at new position
+  if(moveMode&&moveBid){
+    const b=ap.bauteile.find(b=>b.id===moveBid);
+    if(b){
+      let finalX=x, finalY=y;
+      // snap only when moving a single endpoint of a line
+      if(b.formType==='linie'&&(moveEndpoint==='start'||moveEndpoint==='end')){
+        const snapped=snapToEndpoint(x,y,b.id,ap);
+        if(snapped){finalX=snapped.x;finalY=snapped.y;}
+      }
+      if(b.formType==='linie'){
+        if(moveEndpoint==='start'){ b.x=finalX; b.y=finalY; }
+        else if(moveEndpoint==='end'){ b.x2=finalX; b.y2=finalY; }
+        else { const dx=x-b.x, dy=y-b.y; b.x+=dx; b.y+=dy; b.x2+=dx; b.y2+=dy; }
+      } else {
+        b.x=finalX; b.y=finalY;
+      }
+    }
+    moveBid=null; moveEndpoint=null;
+    document.getElementById('move-banner').textContent='✥ Bauteil anklicken zum Verschieben — ESC zum Abbrechen';
+    renderMarkers(); render(); saveProjects();
+    return;
+  }
+  if(moveMode) return; // click on empty area in move mode = do nothing
+
+  if(!placeMode) return;
+  if(placeMode==='punkt'){
+    ap.bauteile.push({id:nid(),...pendingBauteil,formType:'punkt',x,y});
+    exitPlaceMode(); render(); saveProjects();
+  } else if(placeMode==='linie-start'){
+    lineStart={x,y}; placeMode='linie-end';
+    document.getElementById('place-banner').textContent='📍 Klicke auf Endpunkt der Linie';
+  } else if(placeMode==='linie-end'){
+    ap.bauteile.push({id:nid(),...pendingBauteil,formType:'linie',x:lineStart.x,y:lineStart.y,x2:x,y2:y});
+    exitPlaceMode(); render(); saveProjects();
+  }
+});
+
+// ── MAIN RENDER ───────────────────────────────────────────
+function render(){
+  const ap=activePlan(), s=getSorted();
+  const list=document.getElementById('plan-list');
+  if(!s.length){
+    list.innerHTML='<div style="padding:16px 14px;color:#475569;font-size:12px;text-align:center">Noch keine Pläne.<br>Lade einen PDF hoch.</div>';
+  } else {
+    list.innerHTML=s.map(p=>{
+      const done=p.bauteile.filter(b=>b.status==='fertig').length,total=p.bauteile.length;
+      const pct=total?Math.round(done/total*100):0;
+      return`<div class="plan-item${p.id===activeId?' active':''}" data-pid="${p.id}">
+        <div class="pname">${p.name}</div><div class="pkm">km ${p.kmStart} – ${p.kmEnd}</div>
+        <div class="pbar-wrap"><div class="pbar" style="width:${pct}%;background:${pct===100?'#22c55e':'#e30613'}"></div></div>
+        <div class="pstat">${done}/${total} fertig</div>
+        <div class="plan-item-actions">
+          <button class="pia-btn pia-edit" data-pid="${p.id}" title="km bearbeiten">✏️</button>
+          <button class="pia-btn pia-del" data-pid="${p.id}" title="Plan löschen">🗑</button>
+        </div>
+      </div>`;
+    }).join('');
+    list.querySelectorAll('.plan-item').forEach(el=>el.addEventListener('click',e=>{
+      if(e.target.closest('.plan-item-actions')) return;
+      selectPlan(el.dataset.pid);
+    }));
+    list.querySelectorAll('.pia-edit').forEach(btn=>btn.addEventListener('click',e=>{
+      e.stopPropagation(); openEditPlan(btn.dataset.pid);
+    }));
+    list.querySelectorAll('.pia-del').forEach(btn=>btn.addEventListener('click',e=>{
+      e.stopPropagation(); deletePlan(btn.dataset.pid);
+    }));
+  }
+  const kmNav=document.getElementById('km-nav');
+  if(s.length>1){
+    kmNav.style.display='flex';
+    document.getElementById('km-from').textContent='km '+s[0].kmStart;
+    document.getElementById('km-to').textContent='km '+s[s.length-1].kmEnd;
+  } else {
+    kmNav.style.display='none';
+  }
+  const badge=document.getElementById('km-badge');
+  if(ap){badge.style.display='block';badge.textContent=`📍 km ${ap.kmStart} – ${ap.kmEnd}`;}else badge.style.display='none';
+  renderStatsBar();
+  const empty=document.getElementById('empty'),tabs=document.getElementById('tabs');
+  const planView=document.getElementById('plan-view'),tableView=document.getElementById('table-view');
+  if(!ap){empty.style.display='flex';tabs.style.display='none';planView.classList.remove('visible');tableView.classList.remove('visible');return;}
+  empty.style.display='none';tabs.style.display='flex';
+  const curTab=document.querySelector('.tab.active')?.dataset.tab||'plan';
+  planView.classList.toggle('visible',curTab==='plan');
+  tableView.classList.toggle('visible',curTab==='tabelle');
+  document.getElementById('uebersicht-view').style.display=curTab==='uebersicht'?'flex':'none';
+  document.getElementById('uebersicht-view').style.flexDirection='column';
+  document.getElementById('dashboard-view').style.display=curTab==='dashboard'?'flex':'none';
+  document.getElementById('zoom-controls').style.display=curTab==='plan'?'flex':'none';
+  document.getElementById('tab-hint').textContent=`${ap.bauteile.length} Bauteile`;
+  if(curTab==='plan') renderMarkers();
+  if(curTab==='tabelle') renderTable();
+  if(curTab==='uebersicht') renderUebersicht();
+  if(curTab==='dashboard') renderDashboard();
+}
+
+function renderStatsBar(){
+  document.getElementById('stats-rows').innerHTML=Object.entries(config.status).map(([k,v])=>
+    `<div class="stat-row"><div class="stat-dot" style="background:${v.color}"></div>
+    <span class="stat-name">${v.label}</span>
+    <span class="stat-count">${allBauteile().filter(b=>b.status===k).length}</span></div>`
+  ).join('');
+}
+
+function setActiveTab(t){
+  document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===t));
+  render();
+}
+
+function renderTable(){
+  const ap=activePlan(); if(!ap) return;
+  const fb=document.getElementById('filter-bar');
+  fb.innerHTML=[{k:'alle',l:'Alle'},...Object.entries(config.status).map(([k,v])=>({k,l:v.label}))].map(o=>{
+    const cnt=o.k==='alle'?'':` (${ap.bauteile.filter(b=>b.status===o.k).length})`;
+    const col=o.k!=='alle'?config.status[o.k].color:'#60a5fa';
+    const ia=filterStatus===o.k;
+    return`<button class="fbtn${ia?' active':''}" data-fs="${o.k}" style="${ia?`border-color:${col};background:${col}22`:''}">${o.l}${cnt}</button>`;
+  }).join('');
+  fb.querySelectorAll('.fbtn').forEach(el=>el.addEventListener('click',()=>{filterStatus=el.dataset.fs;renderTable();}));
+  const rows=ap.bauteile.filter(b=>filterStatus==='alle'||b.status===filterStatus);
+  const tc=document.getElementById('table-container');
+  if(!rows.length){tc.innerHTML='<div style="color:#475569;text-align:center;margin-top:40px;font-size:14px">Keine Bauteile.</div>';return;}
+  tc.innerHTML=`<table id="data-table"><thead><tr>
+    ${['Nr.','Name','km','Typ','Soll','Ist','Einheit','Datum','Status','Bilder','Notizen'].map(h=>`<th>${h}</th>`).join('')}
+    </tr></thead><tbody>
+    ${rows.map(b=>{
+      const kmStr=b.formType==='linie'?(b.kmStart||'')+(b.kmEnd?'–'+b.kmEnd:''):(b.km||'');
+      const imgs=b.images&&b.images.length?b.images.map(img=>`<img class="thumb-tiny" src="${img.dataUrl}" onclick="openLightbox('${img.dataUrl}')">`).join(''):'–';
+      const col=config.status[b.status]?.color||'#9ca3af';
+      const lbl=config.status[b.status]?.label||b.status;
+      return`<tr class="trow" data-bid="${b.id}">
+        <td style="color:#64748b">${b.nummer||''}</td>
+        <td style="font-weight:600">${b.name}</td>
+        <td style="color:#94a3b8">${kmStr}</td>
+        <td style="color:#94a3b8">${b.typ||''}</td>
+        <td style="color:#64748b">${b.sollPlan||'–'}</td>
+        <td>${b.soll||'–'}</td><td style="color:#94a3b8">${b.einheit||''}</td>
+        <td style="color:#94a3b8;font-size:11px">${b.datum||''}</td>
+        <td><span class="status-badge" style="background:${col}">${lbl}</span></td>
+        <td style="display:flex;gap:4px;flex-wrap:wrap">${imgs}</td>
+        <td style="color:#64748b;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${b.notizen||''}</td>
+      </tr>`;
+    }).join('')}</tbody></table>`;
+  tc.querySelectorAll('.trow').forEach(el=>el.addEventListener('click',e=>{if(e.target.tagName==='IMG')return;openEditBauteil(el.dataset.bid);}));
+}
+
+// ── ÜBERSICHT ─────────────────────────────────────────────
+function getAllRows(){
+  return plans.flatMap(p=>p.bauteile.map(b=>({...b,_planName:p.name,_planKmStart:p.kmStart,_planKmEnd:p.kmEnd})));
+}
+
+function renderUebersicht(){
+  const search=(document.getElementById('uebersicht-search')?.value||'').toLowerCase();
+  const filterPlan=document.getElementById('uebersicht-filter-plan')?.value||'';
+  const filterTyp=document.getElementById('uebersicht-filter-typ')?.value||'';
+  const filterStatus=document.getElementById('uebersicht-filter-status')?.value||'';
+
+  // populate filter dropdowns
+  const planSel=document.getElementById('uebersicht-filter-plan');
+  const curPlan=planSel.value;
+  planSel.innerHTML='<option value="">Alle Pläne</option>'+plans.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  planSel.value=curPlan;
+
+  const typSel=document.getElementById('uebersicht-filter-typ');
+  const curTyp=typSel.value;
+  typSel.innerHTML='<option value="">Alle Typen</option>'+config.bauteilTypen.map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
+  typSel.value=curTyp;
+
+  const statSel=document.getElementById('uebersicht-filter-status');
+  const curStat=statSel.value;
+  statSel.innerHTML='<option value="">Alle Status</option>'+Object.entries(config.status).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join('');
+  statSel.value=curStat;
+
+  let rows=getAllRows();
+  if(filterPlan) rows=rows.filter(b=>{ const p=plans.find(x=>x.id===filterPlan); return p&&p.bauteile.some(x=>x.id===b.id); });
+  if(filterTyp) rows=rows.filter(b=>b.typId===filterTyp);
+  if(filterStatus) rows=rows.filter(b=>b.status===filterStatus);
+  if(search) rows=rows.filter(b=>[b.name,b.nummer,b.typ,b._planName,b.notizen,b.km,b.kmStart,b.kmEnd].join(' ').toLowerCase().includes(search));
+
+  document.getElementById('uebersicht-count').textContent=`${rows.length} Bauteile / ${plans.length} Pläne`;
+
+  const tc=document.getElementById('uebersicht-container');
+  if(!rows.length){tc.innerHTML='<div style="color:#475569;text-align:center;margin-top:40px;font-size:14px">Keine Bauteile gefunden.</div>';return;}
+
+  tc.innerHTML=`<table id="data-table" style="font-size:12px"><thead><tr>
+    ${['Nr.','Plan','Von–Bis km','Name','km','Typ','Menge','Einheit','Datum','Status','Notizen'].map(h=>`<th>${h}</th>`).join('')}
+    </tr></thead><tbody>
+    ${rows.map(b=>{
+      const kmStr=b.formType==='linie'?(b.kmStart||'')+(b.kmEnd?'–'+b.kmEnd:''):(b.km||'');
+      const col=config.status[b.status]?.color||'#9ca3af';
+      const lbl=config.status[b.status]?.label||b.status;
+      return`<tr class="trow" data-bid="${b.id}" data-planname="${b._planName}" style="cursor:pointer">
+        <td style="color:#64748b;white-space:nowrap">${b.nummer||''}</td>
+        <td style="color:#93c5fd;white-space:nowrap">${b._planName}</td>
+        <td style="color:#64748b;font-size:11px;white-space:nowrap">km ${b._planKmStart}–${b._planKmEnd}</td>
+        <td style="font-weight:600">${b.name}</td>
+        <td style="color:#94a3b8;white-space:nowrap">${kmStr}</td>
+        <td style="color:#94a3b8">${b.typ||''}</td>
+        <td>${b.soll||''}</td>
+        <td style="color:#94a3b8">${b.einheit||''}</td>
+        <td style="color:#94a3b8;font-size:11px;white-space:nowrap">${b.datum||''}</td>
+        <td><span class="status-badge" style="background:${col}">${lbl}</span></td>
+        <td style="color:#64748b;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${b.notizen||''}</td>
+      </tr>`;
+    }).join('')}</tbody></table>`;
+
+  // click row → switch to that plan and open edit
+  tc.querySelectorAll('.trow').forEach(el=>el.addEventListener('click',async()=>{
+    const bid=el.dataset.bid;
+    const plan=plans.find(p=>p.bauteile.some(b=>b.id===bid));
+    if(!plan) return;
+    await selectPlan(plan.id);
+    openEditBauteil(bid);
+  }));
+}
+
+// filter/search listeners for übersicht
+document.getElementById('uebersicht-search').addEventListener('input',renderUebersicht);
+document.getElementById('uebersicht-filter-plan').addEventListener('change',renderUebersicht);
+document.getElementById('uebersicht-filter-typ').addEventListener('change',renderUebersicht);
+document.getElementById('uebersicht-filter-status').addEventListener('change',renderUebersicht);
+
+// ── DASHBOARD ─────────────────────────────────────────────
+function renderDashboard(){
+  const ap=activePlan(); if(!ap) return;
+  const allB=plans.flatMap(p=>p.bauteile);
+  const proj=activeProjectId?projects.find(p=>p.id===activeProjectId):null;
+
+  document.getElementById('dashboard-plan-info').textContent=
+    proj?proj.name+' · '+plans.length+' Plan'+(plans.length!==1?'e':''):'';
+
+  const total=allB.length;
+  const fertig=allB.filter(b=>b.status==='fertig').length;
+  const inarbeit=allB.filter(b=>b.status==='inarbeit').length;
+  const problem=allB.filter(b=>b.status==='problem').length;
+  const abrechnen=allB.filter(b=>b.status==='abrechnen').length;
+  const offen=allB.filter(b=>!['fertig','inarbeit','problem','abrechnen'].includes(b.status)).length;
+  const pct=total?Math.round((fertig+abrechnen)/total*100):0;
+
+  // Gesamt Soll = Summe aller Soll-Mengen, Gesamt Ist = Summe aller Ist-Mengen
+  const sollGes=allB.reduce((s,b)=>s+parseFloat(b.sollPlan||0),0);
+  const istGes=allB.reduce((s,b)=>s+parseFloat(b.soll||0),0);
+  const pctMenge=sollGes>0?Math.min(100,Math.round(istGes/sollGes*100)):null;
+
+  // Abrechnung: Ist-Menge × Einheitspreis für Bauteile mit Status "abrechnen"
+  const abrechnungBauteile=allB.filter(b=>b.status==='abrechnen');
+  const abrechnungSumme=abrechnungBauteile.reduce((sum,b)=>{
+    const typ=config.bauteilTypen.find(t=>t.id===b.typId);
+    const ep=parseFloat(typ?.einheitspreis||0);
+    const menge=parseFloat(b.soll||0);
+    return sum+ep*menge;
+  },0);
+
+  document.getElementById('db-gesamt').innerHTML=`
+    <div style="font-size:13px;font-weight:800;color:#f1f5f9;margin-bottom:14px">Gesamtfortschritt</div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px">
+      ${[
+        {label:'Gesamt',val:total,col:'#64748b'},
+        {label:'Fertig',val:fertig,col:'#22c55e'},
+        {label:'In Arbeit',val:inarbeit,col:'#f59e0b'},
+        {label:'Abrechnen',val:abrechnen,col:'#8b5cf6'},
+        {label:'Problem',val:problem,col:'#ef4444'},
+        {label:'Offen',val:offen,col:'#94a3b8'},
+      ].map(s=>`<div style="text-align:center">
+        <div style="font-size:24px;font-weight:800;color:${s.col}">${s.val}</div>
+        <div style="font-size:11px;color:#64748b">${s.label}</div>
+      </div>`).join('')}
+    </div>
+    <div style="height:10px;background:#0f172a;border-radius:10px;overflow:hidden;margin-bottom:6px">
+      <div style="height:10px;border-radius:10px;background:linear-gradient(90deg,#22c55e,#16a34a);width:${pct}%;transition:width .4s"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:#64748b;margin-bottom:${abrechnungSumme>0?'20':'0'}px">
+      <span>${fertig+abrechnen} von ${total} Bauteilen fertig/abrechenbar</span>
+      <span style="font-weight:700;color:#22c55e">${pct}%</span>
+    </div>
+
+    ${abrechnungSumme>0?`
+    <div style="border-top:1px solid #334155;padding-top:16px">
+      <div style="font-size:13px;font-weight:800;color:#f1f5f9;margin-bottom:12px">💶 Abrechnungsstatus</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap">
+        <div style="flex:1;min-width:140px;background:#0f172a;border-radius:10px;padding:14px;text-align:center">
+          <div style="font-size:11px;color:#64748b;margin-bottom:6px">Abrechenbare Bauteile</div>
+          <div style="font-size:26px;font-weight:800;color:#8b5cf6">${abrechnen}</div>
+        </div>
+        <div style="flex:2;min-width:200px;background:#0f172a;border-radius:10px;padding:14px;text-align:center">
+          <div style="font-size:11px;color:#64748b;margin-bottom:6px">Abrechnungssumme (Ist-Menge × Einheitspreis)</div>
+          <div style="font-size:28px;font-weight:800;color:#8b5cf6">${abrechnungSumme.toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2})} €</div>
+        </div>
+      </div>
+    </div>`:''}
+
+    <div style="border-top:1px solid #334155;padding-top:16px;margin-top:${abrechnungSumme>0?'0':'16'}px">
+      <div style="font-size:13px;font-weight:800;color:#f1f5f9;margin-bottom:12px">Soll-Ist-Vergleich (Mengen gesamt)</div>
+      <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:14px">
+        <div style="text-align:center;flex:1;min-width:80px;background:#0f172a;border-radius:10px;padding:14px">
+          <div style="font-size:28px;font-weight:800;color:#93c5fd">${sollGes>0?sollGes.toLocaleString('de-DE'):'–'}</div>
+          <div style="font-size:11px;color:#64748b;margin-top:4px">Soll-Menge gesamt</div>
+        </div>
+        <div style="text-align:center;flex:1;min-width:80px;background:#0f172a;border-radius:10px;padding:14px">
+          <div style="font-size:28px;font-weight:800;color:${istGes>=sollGes&&sollGes>0?'#22c55e':'#f59e0b'}">${istGes>0?istGes.toLocaleString('de-DE'):'–'}</div>
+          <div style="font-size:11px;color:#64748b;margin-top:4px">Ist-Menge gesamt</div>
+        </div>
+        <div style="text-align:center;flex:1;min-width:80px;background:#0f172a;border-radius:10px;padding:14px">
+          <div style="font-size:28px;font-weight:800;color:${(pctMenge||0)>=100?'#22c55e':'#f59e0b'}">${pctMenge!==null?pctMenge:0}%</div>
+          <div style="font-size:11px;color:#64748b;margin-top:4px">Mengenverhältnis</div>
+        </div>
+      </div>
+      <div style="height:10px;background:#0f172a;border-radius:10px;overflow:hidden;margin-bottom:6px">
+        <div style="height:10px;border-radius:10px;background:${(pctMenge||0)>=100?'#22c55e':'#1e40af'};width:${pctMenge||0}%;transition:width .4s"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:#64748b">
+        <span>Ist ${istGes.toLocaleString('de-DE')} von Soll ${sollGes.toLocaleString('de-DE')}</span>
+        <span style="font-weight:700;color:${(pctMenge||0)>=100?'#22c55e':'#93c5fd'}">${pctMenge!==null?pctMenge:0}%</span>
+      </div>
+    </div>`;
+
+  // ── TYPEN / GRUPPEN ──
+  // Typen die in einer Gruppe sind
+  const gruppiertTypIds=new Set(config.gruppen.flatMap(g=>g.typIds));
+
+  // Gruppen anzeigen
+  const gruppenHtml=config.gruppen.map(g=>{
+    const gB=allB.filter(b=>g.typIds.includes(b.typId));
+    if(!gB.length) return '';
+    const gF=gB.filter(b=>b.status==='fertig');
+    const gSoll=gB.reduce((s,b)=>s+parseFloat(b.sollPlan||0),0);
+    const gIst=gB.reduce((s,b)=>s+parseFloat(b.soll||0),0);
+    const pctA=gB.length?Math.round(gF.length/gB.length*100):0;
+    const pctM=gSoll>0?Math.min(100,Math.round(gIst/gSoll*100)):null;
+    const pct=pctM!==null?pctM:pctA;
+    const col=pct===100?'#22c55e':pct>0?'#f59e0b':'#64748b';
+    // sub-typen
+    const subHtml=g.typIds.map(tid=>{
+      const typ=config.bauteilTypen.find(t=>t.id===tid);
+      if(!typ) return '';
+      const tB=allB.filter(b=>b.typId===tid);
+      if(!tB.length) return '';
+      const tF=tB.filter(b=>b.status==='fertig').length;
+      const tSoll=tB.reduce((s,b)=>s+parseFloat(b.sollPlan||0),0);
+      const tIst=tB.reduce((s,b)=>s+parseFloat(b.soll||0),0);
+      const tPct=tSoll>0?Math.min(100,Math.round(tIst/tSoll*100)):(tB.length?Math.round(tF/tB.length*100):0);
+      const tc=tPct===100?'#22c55e':tPct>0?'#f59e0b':'#94a3b8';
+      return`<div style="display:flex;align-items:center;gap:10px;padding:6px 10px;border-top:1px solid #1e293b">
+        <span style="font-size:11px;color:#64748b;width:16px">${typ.formType==='linie'?'─':'●'}</span>
+        <span style="font-size:12px;color:#94a3b8;flex:1">${typ.name}</span>
+        <span style="font-size:11px;color:#64748b">${tF}/${tB.length}</span>
+        ${tSoll>0?`<span style="font-size:11px;color:#64748b">${tIst}/${tSoll} ${typ.einheit||''}</span>`:''}
+        <span style="font-size:12px;font-weight:700;color:${tc};min-width:34px;text-align:right">${tPct}%</span>
+      </div>`;
+    }).join('');
+    return`<div style="background:#1e293b;border-radius:12px;border:1.5px solid #334155;overflow:hidden">
+      <div style="display:flex;align-items:center;gap:10px;padding:12px 14px">
+        <span style="font-size:16px">📦</span>
+        <span style="font-weight:700;color:#f1f5f9;font-size:13px;flex:1">${g.name}</span>
+        <span style="font-size:11px;color:#64748b">${gF.length}/${gB.length} Bauteile</span>
+        ${gSoll>0?`<span style="font-size:11px;color:#64748b">${gIst.toLocaleString('de-DE')}/${gSoll.toLocaleString('de-DE')}</span>`:''}
+        <div style="width:70px;height:6px;background:#0f172a;border-radius:6px;overflow:hidden">
+          <div style="height:6px;border-radius:6px;background:${col};width:${pct}%"></div>
+        </div>
+        <span style="font-size:13px;font-weight:700;color:${col};min-width:36px;text-align:right">${pct}%</span>
+      </div>
+      ${subHtml}
+    </div>`;
+  }).join('');
+
+  // Ungrouped Typen
+  const ungroupedHtml=config.bauteilTypen.filter(typ=>!gruppiertTypIds.has(typ.id)).map(typ=>{
+    const typB=allB.filter(b=>b.typId===typ.id);
+    if(!typB.length) return '';
+    const typF=typB.filter(b=>b.status==='fertig');
+    const pctA=typB.length?Math.round(typF.length/typB.length*100):0;
+    const col=pctA===100?'#22c55e':pctA>0?'#f59e0b':'#64748b';
+    return`<div style="background:#1e293b;border-radius:12px;padding:12px 16px;border:1.5px solid #334155;display:flex;align-items:center;gap:14px">
+      <span style="font-size:16px">${typ.formType==='linie'?'─':'●'}</span>
+      <span style="font-weight:700;color:#f1f5f9;font-size:13px;flex:1">${typ.name}</span>
+      <span style="font-size:11px;color:#64748b">${typF.length}/${typB.length} fertig</span>
+      <div style="width:80px;height:6px;background:#0f172a;border-radius:6px;overflow:hidden">
+        <div style="height:6px;border-radius:6px;background:${col};width:${pctA}%"></div>
+      </div>
+      <span style="font-size:12px;font-weight:700;color:${col};min-width:36px;text-align:right">${pctA}%</span>
+    </div>`;
+  }).join('');
+
+  document.getElementById('db-typen').innerHTML=
+    (gruppenHtml||'')+(ungroupedHtml?`<div style="font-size:11px;color:#475569;margin-top:4px;margin-bottom:2px;padding-left:4px">Weitere Typen</div>${ungroupedHtml}`:'');
+
+  // ── STATUS VERTEILUNG ──
+  document.getElementById('db-status').innerHTML=`
+    <div style="font-size:13px;font-weight:800;color:#f1f5f9;margin-bottom:12px">Status-Verteilung</div>
+    <div style="display:flex;gap:0;height:20px;border-radius:8px;overflow:hidden;margin-bottom:10px">
+      ${Object.entries(config.status).map(([k,v])=>{
+        const cnt=allB.filter(b=>b.status===k).length;
+        const w=total?Math.round(cnt/total*100):0;
+        return w>0?`<div style="width:${w}%;background:${v.color}" title="${v.label}: ${cnt}"></div>`:'';
+      }).join('')}
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:12px">
+      ${Object.entries(config.status).map(([k,v])=>{
+        const cnt=allB.filter(b=>b.status===k).length;
+        const w=total?Math.round(cnt/total*100):0;
+        return`<div style="display:flex;align-items:center;gap:6px">
+          <div style="width:10px;height:10px;border-radius:50%;background:${v.color}"></div>
+          <span style="font-size:12px;color:#94a3b8">${v.label}</span>
+          <span style="font-size:12px;font-weight:700;color:#f1f5f9">${cnt}</span>
+          <span style="font-size:10px;color:#64748b">(${w}%)</span>
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+
+document.getElementById('btn-export-dashboard').addEventListener('click',()=>{
+  const proj=activeProjectId?projects.find(p=>p.id===activeProjectId):null;
+  const allB=plans.flatMap(p=>p.bauteile);
+  const datum=new Date().toLocaleDateString('de-DE');
+  if(!allB.length){alert('Keine Bauteile vorhanden.');return;}
+
+  const total=allB.length;
+  const fertig=allB.filter(b=>b.status==='fertig').length;
+  const inarbeit=allB.filter(b=>b.status==='inarbeit').length;
+  const problem=allB.filter(b=>b.status==='problem').length;
+  const offen=allB.filter(b=>!['fertig','inarbeit','problem'].includes(b.status)).length;
+  const pct=total?Math.round(fertig/total*100):0;
+  const sollGes=allB.reduce((s,b)=>s+parseFloat(b.sollPlan||0),0);
+  const istGes=allB.reduce((s,b)=>s+parseFloat(b.soll||0),0);
+  const pctMenge=sollGes>0?Math.min(100,Math.round(istGes/sollGes*100)):null;
+
+  const abrB=allB.filter(b=>b.status==='abrechnen');
+  const abrSumme=abrB.reduce((sum,b)=>{
+    const typ=config.bauteilTypen.find(t=>t.id===b.typId);
+    return sum+(parseFloat(typ?.einheitspreis||0)*parseFloat(b.soll||0));
+  },0);
+
+  const barPct=(v,max=100)=>`<div style="height:8px;background:#e2e8f0;border-radius:4px;overflow:hidden;margin:4px 0 2px">
+    <div style="height:8px;width:${v}%;background:${v>=100?'#22c55e':v>0?'#1e40af':'#e2e8f0'};border-radius:4px"></div></div>`;
+
+  let html=`<!DOCTYPE html><html><head><meta charset="UTF-8"/>
+  <title>Bericht ${proj?.name||datum}</title>
+  <style>
+    *{box-sizing:border-box}
+    body{font-family:Arial,sans-serif;padding:28px 32px;color:#1e293b;max-width:860px;margin:0 auto;font-size:13px}
+    h1{color:#1e3a5f;border-bottom:3px solid #e30613;padding-bottom:8px;margin-bottom:4px;font-size:20px}
+    h2{color:#1e3a5f;font-size:13px;font-weight:700;margin:22px 0 8px;text-transform:uppercase;letter-spacing:.05em;color:#64748b}
+    .meta{color:#64748b;font-size:12px;margin-bottom:22px;line-height:1.7}
+    .kpi-row{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:6px}
+    .kpi{text-align:center;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 6px}
+    .kpi-val{font-size:24px;font-weight:800;line-height:1}
+    .kpi-lbl{font-size:10px;color:#64748b;margin-top:4px}
+    .si-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:6px}
+    .bar-wrap{height:10px;background:#e2e8f0;border-radius:5px;overflow:hidden;margin:6px 0 3px}
+    .bar{height:10px;border-radius:5px}
+    .bar-lbl{display:flex;justify-content:space-between;font-size:10px;color:#64748b;margin-bottom:14px}
+    table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:4px}
+    thead tr{background:#1e3a5f;color:#fff}
+    th{padding:7px 10px;text-align:left;font-weight:600;font-size:11px}
+    td{padding:7px 10px;border-bottom:1px solid #e2e8f0}
+    tr:nth-child(even) td{background:#f8fafc}
+    .bold{font-weight:700}
+    .green{color:#16a34a;font-weight:700}
+    .amber{color:#d97706;font-weight:700}
+    .red{color:#dc2626;font-weight:700}
+    .grey{color:#64748b}
+    .pbar{height:7px;background:#e2e8f0;border-radius:4px;overflow:hidden;min-width:60px}
+    .pbar-inner{height:7px;border-radius:4px}
+    .footer{margin-top:28px;padding-top:10px;border-top:1px solid #e2e8f0;font-size:10px;color:#94a3b8;display:flex;justify-content:space-between}
+    @media print{@page{margin:1.5cm}body{padding:0}}
+  </style></head><body>
+  <h1>Bauüberwachung — Zusammenfassung</h1>
+  <div class="meta">
+    ${proj?`<strong>${proj.name}</strong>${proj.nummer?' &nbsp;·&nbsp; Nr. '+proj.nummer:''}${proj.auftraggeber?' &nbsp;·&nbsp; '+proj.auftraggeber:''}${proj.strecke?'<br>Strecke: '+proj.strecke:''}<br>`:''}
+    Stand: <strong>${datum}</strong> &nbsp;·&nbsp; ${plans.length} Plan${plans.length!==1?'e':''} &nbsp;·&nbsp; ${total} Bauteile gesamt
+  </div>
+
+  <h2>Gesamtfortschritt</h2>
+  <div class="kpi-row">
+    <div class="kpi"><div class="kpi-val" style="color:#64748b">${total}</div><div class="kpi-lbl">Gesamt</div></div>
+    <div class="kpi"><div class="kpi-val" style="color:#16a34a">${fertig}</div><div class="kpi-lbl">Fertig</div></div>
+    <div class="kpi"><div class="kpi-val" style="color:#d97706">${inarbeit}</div><div class="kpi-lbl">In Arbeit</div></div>
+    <div class="kpi"><div class="kpi-val" style="color:#8b5cf6">${abrB.length}</div><div class="kpi-lbl">Abrechnen</div></div>
+    <div class="kpi"><div class="kpi-val" style="color:#dc2626">${problem}</div><div class="kpi-lbl">Problem</div></div>
+  </div>
+  <div class="bar-wrap"><div class="bar" style="width:${pct}%;background:#16a34a"></div></div>
+  <div class="bar-lbl"><span>${fertig+abrB.length} von ${total} fertig/abrechenbar</span><strong style="color:#16a34a">${pct}%</strong></div>
+  ${abrSumme>0?`<div style="background:#f5f3ff;border:1px solid #8b5cf6;border-radius:8px;padding:12px 16px;margin-top:10px;display:flex;justify-content:space-between;align-items:center">
+    <div><div style="font-size:11px;font-weight:700;color:#6d28d9">💶 ABRECHNUNGSSUMME</div><div style="font-size:10px;color:#7c3aed">${abrB.length} Bauteile · Ist-Menge × Einheitspreis</div></div>
+    <div style="font-size:22px;font-weight:800;color:#6d28d9">${abrSumme.toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2})} €</div>
+  </div>`:''}`;
+
+  // Soll-Ist immer anzeigen
+  const pctMengeDisplay=pctMenge!==null?pctMenge:0;
+  html+=`<h2>Soll-Ist-Vergleich (Mengen)</h2>
+    <div class="si-row">
+      <div class="kpi"><div class="kpi-val" style="color:#1e40af">${sollGes>0?sollGes.toLocaleString('de-DE'):'–'}</div><div class="kpi-lbl">Soll-Menge gesamt</div></div>
+      <div class="kpi"><div class="kpi-val" style="color:${istGes>=sollGes&&sollGes>0?'#16a34a':'#d97706'}">${istGes>0?istGes.toLocaleString('de-DE'):'–'}</div><div class="kpi-lbl">Ist-Menge gesamt</div></div>
+      <div class="kpi"><div class="kpi-val" style="color:${pctMengeDisplay>=100?'#16a34a':'#d97706'}">${pctMengeDisplay}%</div><div class="kpi-lbl">Mengenverhältnis</div></div>
+    </div>
+    <div class="bar-wrap"><div class="bar" style="width:${pctMengeDisplay}%;background:${pctMengeDisplay>=100?'#16a34a':'#1e40af'}"></div></div>
+    <div class="bar-lbl"><span>Ist ${istGes.toLocaleString('de-DE')} · Soll ${sollGes.toLocaleString('de-DE')}</span><strong>${pctMengeDisplay}%</strong></div>`;
+
+  // Zusammenfassung: Gruppen + ungrouped Typen
+  const expGruppiertIds=new Set(config.gruppen.flatMap(g=>g.typIds));
+  const typenMit=config.bauteilTypen.filter(t=>allB.some(b=>b.typId===t.id));
+  if(config.gruppen.length||typenMit.length){
+    html+=`<h2>Nach Bauteiltyp</h2>
+    <table><thead><tr>
+      <th>Typ / Gruppe</th><th>Gesamt</th><th>Fertig</th><th>In Arbeit</th><th>Problem</th><th>Offen</th><th>Soll</th><th>Ist</th><th style="min-width:80px">Fortschritt</th>
+    </tr></thead><tbody>`;
+    // Gruppen
+    config.gruppen.forEach(g=>{
+      const gB=allB.filter(b=>g.typIds.includes(b.typId));
+      if(!gB.length) return;
+      const gF=gB.filter(b=>b.status==='fertig').length;
+      const gA=gB.filter(b=>b.status==='inarbeit').length;
+      const gP=gB.filter(b=>b.status==='problem').length;
+      const gO=gB.filter(b=>!['fertig','inarbeit','problem','abrechnen'].includes(b.status)).length;
+      const gSoll=gB.reduce((s,b)=>s+parseFloat(b.sollPlan||0),0);
+      const gIst=gB.reduce((s,b)=>s+parseFloat(b.soll||0),0);
+      const gPct=gSoll>0?Math.min(100,Math.round(gIst/gSoll*100)):(gB.length?Math.round(gF/gB.length*100):0);
+      const gcol=gPct===100?'green':gPct>0?'amber':'grey';
+      html+=`<tr style="background:#f0f4ff">
+        <td><strong>📦 ${g.name}</strong></td>
+        <td>${gB.length}</td><td class="green">${gF}</td><td class="amber">${gA}</td><td class="red">${gP}</td><td class="grey">${gO}</td>
+        <td class="grey">${gSoll>0?gSoll.toLocaleString('de-DE'):'-'}</td>
+        <td class="${gSoll>0&&gIst>=gSoll?'green':'grey'}">${gIst>0?gIst.toLocaleString('de-DE'):'-'}</td>
+        <td><div style="display:flex;align-items:center;gap:6px">
+          <div class="pbar"><div class="pbar-inner" style="width:${gPct}%;background:${gPct===100?'#16a34a':gPct>0?'#1e40af':'#e2e8f0'}"></div></div>
+          <span class="${gcol}">${gPct}%</span></div></td>
+      </tr>`;
+      g.typIds.forEach(tid=>{
+        const typ=config.bauteilTypen.find(t=>t.id===tid); if(!typ) return;
+        const tb=allB.filter(b=>b.typId===tid); if(!tb.length) return;
+        const tf=tb.filter(b=>b.status==='fertig').length;
+        const ta=tb.filter(b=>b.status==='inarbeit').length;
+        const tp2=tb.filter(b=>b.status==='problem').length;
+        const to=tb.filter(b=>!['fertig','inarbeit','problem','abrechnen'].includes(b.status)).length;
+        const tSoll=tb.reduce((s,b)=>s+parseFloat(b.sollPlan||0),0);
+        const tIst=tb.reduce((s,b)=>s+parseFloat(b.soll||0),0);
+        const tPct=tSoll>0?Math.min(100,Math.round(tIst/tSoll*100)):(tb.length?Math.round(tf/tb.length*100):0);
+        const tc=tPct===100?'green':tPct>0?'amber':'grey';
+        html+=`<tr><td style="padding-left:20px;color:#64748b">↳ ${typ.name}</td>
+          <td class="grey">${tb.length}</td><td class="green">${tf}</td><td class="amber">${ta}</td><td class="red">${tp2}</td><td class="grey">${to}</td>
+          <td class="grey">${tSoll>0?tSoll.toLocaleString('de-DE')+' '+(typ.einheit||''):'-'}</td>
+          <td class="${tSoll>0&&tIst>=tSoll?'green':'grey'}">${tIst>0?tIst.toLocaleString('de-DE')+' '+(typ.einheit||''):'-'}</td>
+          <td><div style="display:flex;align-items:center;gap:6px">
+            <div class="pbar"><div class="pbar-inner" style="width:${tPct}%;background:${tPct===100?'#16a34a':tPct>0?'#1e40af':'#e2e8f0'}"></div></div>
+            <span class="${tc}">${tPct}%</span></div></td>
+        </tr>`;
+      });
+    });
+    // Ungrouped
+    typenMit.filter(t=>!expGruppiertIds.has(t.id)).forEach(typ=>{
+      const tb=allB.filter(b=>b.typId===typ.id);
+      const tf=tb.filter(b=>b.status==='fertig').length;
+      const ta=tb.filter(b=>b.status==='inarbeit').length;
+      const tp2=tb.filter(b=>b.status==='problem').length;
+      const to=tb.filter(b=>!['fertig','inarbeit','problem','abrechnen'].includes(b.status)).length;
+      const tSoll=tb.reduce((s,b)=>s+parseFloat(b.sollPlan||0),0);
+      const tIst=tb.reduce((s,b)=>s+parseFloat(b.soll||0),0);
+      const tPct=tSoll>0?Math.min(100,Math.round(tIst/tSoll*100)):(tb.length?Math.round(tf/tb.length*100):0);
+      const col=tPct===100?'green':tPct>0?'amber':'grey';
+      html+=`<tr><td class="bold">${typ.name}</td>
+        <td class="grey">${tb.length}</td><td class="green">${tf}</td><td class="amber">${ta}</td><td class="red">${tp2}</td><td class="grey">${to}</td>
+        <td class="grey">${tSoll>0?tSoll.toLocaleString('de-DE')+' '+(typ.einheit||''):'-'}</td>
+        <td class="${tSoll>0&&tIst>=tSoll?'green':'grey'}">${tIst>0?tIst.toLocaleString('de-DE')+' '+(typ.einheit||''):'-'}</td>
+        <td><div style="display:flex;align-items:center;gap:6px">
+          <div class="pbar"><div class="pbar-inner" style="width:${tPct}%;background:${tPct===100?'#16a34a':tPct>0?'#1e40af':'#e2e8f0'}"></div></div>
+          <span class="${col}">${tPct}%</span></div></td>
+      </tr>`;
+    });
+    html+=`</tbody></table>`;
+  }
+
+  // Zusammenfassung pro Plan
+  html+=`<h2 style="margin-top:20px">Nach Plan</h2>
+  <table><thead><tr>
+    <th>Plan</th><th>km</th><th>Gesamt</th><th>Fertig</th><th>Problem</th><th style="min-width:80px">Fortschritt</th>
+  </tr></thead><tbody>`;
+  plans.forEach(p=>{
+    const pF=p.bauteile.filter(b=>b.status==='fertig').length;
+    const pP=p.bauteile.filter(b=>b.status==='problem').length;
+    const pPct=p.bauteile.length?Math.round(pF/p.bauteile.length*100):0;
+    const col=pPct===100?'green':pPct>0?'amber':'grey';
+    html+=`<tr>
+      <td class="bold">${p.name}</td>
+      <td class="grey">${p.kmStart} – ${p.kmEnd}</td>
+      <td class="grey">${p.bauteile.length}</td>
+      <td class="green">${pF}</td>
+      <td class="${pP>0?'red':'grey'}">${pP}</td>
+      <td><div style="display:flex;align-items:center;gap:6px">
+        <div class="pbar"><div class="pbar-inner" style="width:${pPct}%;background:${pPct===100?'#16a34a':pPct>0?'#1e40af':'#e2e8f0'}"></div></div>
+        <span class="${col}">${pPct}%</span>
+      </div></td>
+    </tr>`;
+  });
+  html+=`</tbody></table>
+  <div class="footer"><span>Bauplanmanager</span><span>Exportiert am ${datum}</span></div>
+  </body></html>`;
+
+  const w=window.open('','_blank');
+  w.document.write(html); w.document.close();
+  setTimeout(()=>w.print(),600);
+});
+
+// ── EXCEL EXPORT ──────────────────────────────────────────
+document.getElementById('btn-export-excel').addEventListener('click',()=>{
+  const rows=getAllRows();
+  if(!rows.length){alert('Keine Bauteile vorhanden.');return;}
+  const data=rows.map(b=>({
+    'Nr.': b.nummer||'',
+    'Plan': b._planName,
+    'Plan Von km': b._planKmStart,
+    'Plan Bis km': b._planKmEnd,
+    'Name': b.name,
+    'Kilometer': b.formType==='linie'?(b.kmStart||'')+(b.kmEnd?'–'+b.kmEnd:''):(b.km||''),
+    'Typ': b.typ||'',
+    'Soll-Menge': b.sollPlan||'',
+    'Ist-Menge': b.soll||'',
+    'Einheit': b.einheit||'',
+    'Datum': b.datum||'',
+    'Status': config.status[b.status]?.label||b.status,
+    'Notizen': b.notizen||'',
+  }));
+  const ws=XLSX.utils.json_to_sheet(data);
+  // column widths
+  ws['!cols']=[{wch:8},{wch:20},{wch:12},{wch:12},{wch:22},{wch:12},{wch:14},{wch:8},{wch:8},{wch:12},{wch:12},{wch:30}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Bauteile');
+  const date=new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb,`Bauplanmanager_Export_${date}.xlsx`);
+});
+
+// ── EXPORT / IMPORT ───────────────────────────────────────
+function exportProject(){
+  saveProjects();
+  const proj=activeProjectId?projects.find(p=>p.id===activeProjectId):null;
+  if(!proj){alert('Kein aktives Projekt.');return;}
+
+  // Convert blob URLs to base64 before export
+  const exportPlans=async()=>{
+    const plansWithPdf=await Promise.all((proj.plans||[]).map(async p=>{
+      let pdfData=null;
+      if(p.url&&p.url.startsWith('blob:')){
+        try{
+          const resp=await fetch(p.url);
+          const buf=await resp.arrayBuffer();
+          const bytes=new Uint8Array(buf);
+          let bin=''; bytes.forEach(b=>bin+=String.fromCharCode(b));
+          pdfData='data:application/pdf;base64,'+btoa(bin);
+        }catch(e){pdfData=null;}
+      } else if(p.url&&p.url.startsWith('data:')){
+        pdfData=p.url;
+      }
+      return{...p,url:pdfData};
+    }));
+    return plansWithPdf;
+  };
+
+  exportPlans().then(plansExport=>{
+    const data={
+      _version:'5.8',
+      _exported:new Date().toISOString(),
+      _app:'Bauplanmanager',
+      project:{...proj,plans:plansExport},
+      config:{
+        bauteilTypen:config.bauteilTypen,
+        einheiten:config.einheiten,
+        status:config.status,
+        shapes:config.shapes,
+        lineStyles:config.lineStyles,
+        sizeClasses:config.sizeClasses,
+        customFields:config.customFields,
+        gruppen:config.gruppen,
+      }
+    };
+    const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    const datum=new Date().toISOString().slice(0,10);
+    a.href=url; a.download=`${proj.name.replace(/[^a-zA-Z0-9]/g,'_')}_${datum}.json`;
+    a.click(); URL.revokeObjectURL(url);
+  });
+}
+
+function exportAllProjects(){
+  saveProjects();
+  const data={
+    _version:'5.8',
+    _exported:new Date().toISOString(),
+    _app:'Bauplanmanager',
+    projects,
+    config:{
+      bauteilTypen:config.bauteilTypen,
+      einheiten:config.einheiten,
+      status:config.status,
+      shapes:config.shapes,
+      lineStyles:config.lineStyles,
+      sizeClasses:config.sizeClasses,
+      customFields:config.customFields,
+      gruppen:config.gruppen,
+    }
+  };
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  const datum=new Date().toISOString().slice(0,10);
+  a.href=url; a.download=`Bauplanmanager_Alle_Projekte_${datum}.json`;
+  a.click(); URL.revokeObjectURL(url);
+}
+
+function importProject(){
+  document.getElementById('import-file-input').click();
+}
+
+document.getElementById('import-file-input').addEventListener('change',e=>{
+  const file=e.target.files[0]; if(!file) return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    try{
+      const data=JSON.parse(ev.target.result);
+      if(data._app!=='Bauplanmanager'){alert('Ungültige Datei — kein Bauplanmanager-Export.');return;}
+
+      // Import config if present
+      if(data.config){
+        if(data.config.bauteilTypen?.length) config.bauteilTypen=data.config.bauteilTypen;
+        if(data.config.einheiten?.length) config.einheiten=data.config.einheiten;
+        if(data.config.shapes?.length) config.shapes=data.config.shapes;
+        if(data.config.lineStyles?.length) config.lineStyles=data.config.lineStyles;
+        if(data.config.customFields) config.customFields=data.config.customFields;
+        if(data.config.gruppen) config.gruppen=data.config.gruppen;
+        // merge status (keep existing, add new)
+        if(data.config.status) Object.assign(config.status,data.config.status);
+      }
+
+      // Restore PDF base64 data URLs to blob URLs
+      const restorePdfs=async(proj)=>{
+        if(!proj.plans) return proj;
+        proj.plans=await Promise.all(proj.plans.map(async p=>{
+          if(p.url&&p.url.startsWith('data:application/pdf')){
+            try{
+              const res=await fetch(p.url);
+              const blob=await res.blob();
+              p.url=URL.createObjectURL(blob);
+            }catch(e){p.url=null;}
+          }
+          return p;
+        }));
+        return proj;
+      };
+
+      // Single project export
+      if(data.project){
+        const proj=data.project;
+        if(projects.some(p=>p.id===proj.id)){
+          proj.id='p'+Date.now();
+          proj.name+=' (importiert)';
+        }
+        restorePdfs(proj).then(p=>{
+          projects.push(p);
+          saveProjects(); renderProjectScreen();
+          const planCount=(p.plans||[]).length;
+          const bauteilCount=(p.plans||[]).flatMap(x=>x.bauteile||[]).length;
+          if(confirm(`✅ Projekt "${p.name}" importiert!\n${planCount} Pläne · ${bauteilCount} Bauteile\n\nJetzt öffnen?`)){
+            openProject(p.id);
+          }
+        });
+      }
+      // All projects export
+      else if(data.projects){
+        Promise.all(data.projects.map(async proj=>{
+          if(projects.some(p=>p.id===proj.id)){
+            proj.id='p'+Date.now()+Math.random();
+            proj.name+=' (importiert)';
+          }
+          return restorePdfs(proj);
+        })).then(restored=>{
+          restored.forEach(p=>projects.push(p));
+          saveProjects(); renderProjectScreen();
+          alert(`✅ ${restored.length} Projekt${restored.length!==1?'e':''} erfolgreich importiert!`);
+        });
+      } else {
+        alert('Datei konnte nicht gelesen werden — unbekanntes Format.');
+      }
+    } catch(err){
+      alert('Fehler beim Lesen der Datei: '+err.message);
+    }
+    e.target.value=''; // reset so same file can be imported again
+  };
+  reader.readAsText(file);
+});
+
+document.getElementById('btn-export-project').addEventListener('click',exportProject);
+let sidebarOpen=true;
+document.getElementById('sidebar-toggle').addEventListener('click',()=>{
+  sidebarOpen=!sidebarOpen;
+  const sb=document.getElementById('sidebar');
+  const btn=document.getElementById('sidebar-toggle');
+  sb.classList.toggle('collapsed',!sidebarOpen);
+  btn.classList.toggle('collapsed',!sidebarOpen);
+  btn.textContent=sidebarOpen?'◀':'▶';
+  btn.style.left=sidebarOpen?'210px':'0';
+});
+
+// ── EDIT / DELETE PLAN ────────────────────────────────────
+let editPlanId=null;
+function openEditPlan(pid){
+  const p=plans.find(x=>x.id===pid); if(!p) return;
+  editPlanId=pid;
+  document.getElementById('ep-name').value=p.name;
+  document.getElementById('ep-km-start').value=p.kmStart;
+  document.getElementById('ep-km-end').value=p.kmEnd;
+  document.getElementById('modal-edit-plan').classList.add('open');
+}
+async function deletePlan(pid){
+  const p=plans.find(x=>x.id===pid); if(!p) return;
+  if(!confirm(`Plan "${p.name}" wirklich löschen?\n${p.bauteile.length} Bauteile werden ebenfalls gelöscht.`)) return;
+  plans=plans.filter(x=>x.id!==pid);
+  if(activeId===pid) activeId=plans.length?plans[0].id:null;
+  try{
+    await sb.from('plaene').delete().eq('id',pid);
+  }catch(e){ console.error('Delete plan error:',e); }
+  saveProjects(); render();
+  if(activeId) selectPlan(activeId);
+}
+document.getElementById('ep-cancel').addEventListener('click',()=>document.getElementById('modal-edit-plan').classList.remove('open'));
+document.getElementById('modal-edit-plan').addEventListener('click',e=>{if(e.target===e.currentTarget)document.getElementById('modal-edit-plan').classList.remove('open');});
+document.getElementById('ep-del').addEventListener('click',()=>{
+  document.getElementById('modal-edit-plan').classList.remove('open');
+  deletePlan(editPlanId);
+});
+document.getElementById('ep-save').addEventListener('click',()=>{
+  const p=plans.find(x=>x.id===editPlanId); if(!p) return;
+  const name=document.getElementById('ep-name').value.trim();
+  const kmStart=document.getElementById('ep-km-start').value.trim();
+  const kmEnd=document.getElementById('ep-km-end').value.trim();
+  if(!name){alert('Bitte Name eingeben.');return;}
+  p.name=name; p.kmStart=kmStart; p.kmEnd=kmEnd;
+  p.ks=parseKm(kmStart); p.ke=parseKm(kmEnd);
+  document.getElementById('modal-edit-plan').classList.remove('open');
+  saveProjects(); render();
+});
+
+async function selectPlan(id){
+  activeId=id; setActiveTab('plan');
+  await renderPDF(activePlan().url);
+  const s=getSorted(),idx=s.findIndex(p=>p.id===id);
+  if(idx>=0&&s.length>1) document.getElementById('km-slider').value=Math.round(idx/(s.length-1)*100);
+}
+
+async function renderPDF(url){
+  try{
+    const doc=await pdfjsLib.getDocument(url).promise;
+    const page=await doc.getPage(1);
+    const vp=page.getViewport({scale:1.6});
+    const c=document.getElementById('pdf-canvas');
+    c.width=vp.width; c.height=vp.height;
+    await page.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;
+  }catch(e){console.error(e);}
+}
+
+function openUpload(){document.getElementById('modal-upload').classList.add('open');}
+function closeUpload(){
+  document.getElementById('modal-upload').classList.remove('open');
+  ['up-name','up-km-start','up-km-end'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('up-file').value='';document.getElementById('up-filename').textContent='';upFileUrl=null;
+}
+document.getElementById('btn-upload').addEventListener('click',openUpload);
+document.getElementById('btn-upload2').addEventListener('click',openUpload);
+document.getElementById('up-cancel').addEventListener('click',closeUpload);
+document.getElementById('modal-upload').addEventListener('click',e=>{if(e.target===e.currentTarget)closeUpload();});
+document.getElementById('up-file').addEventListener('change',e=>{
+  const f=e.target.files[0]; if(!f) return;
+  upFileUrl=URL.createObjectURL(f);
+  document.getElementById('up-name').value=f.name.replace(/\.pdf$/i,'');
+  document.getElementById('up-filename').textContent='✓ '+f.name;
+});
+document.getElementById('up-submit').addEventListener('click',async()=>{
+  const name=document.getElementById('up-name').value;
+  const kmStart=document.getElementById('up-km-start').value.trim();
+  const kmEnd=document.getElementById('up-km-end').value.trim();
+  if(!upFileUrl||!kmStart||!kmEnd){alert('Bitte alle Felder ausfüllen und PDF auswählen.');return;}
+  const p={id:nid(),name:name||`Plan ${plans.length+1}`,kmStart,kmEnd,ks:parseKm(kmStart),ke:parseKm(kmEnd),url:upFileUrl,bauteile:[]};
+  plans.push(p); closeUpload(); await selectPlan(p.id); saveProjects();
+});
+
+// ── BAUTEIL FORM ──────────────────────────────────────────
+function buildStatusBtns(){
+  document.getElementById('status-btns').innerHTML=Object.entries(config.status).map(([k,v])=>
+    `<button class="sbtn${bfStatus===k?' active':''}" data-sk="${k}" style="${bfStatus===k?`background:${v.color};border-color:${v.color}`:''}">
+    ${v.label}</button>`).join('');
+  document.querySelectorAll('.sbtn').forEach(el=>el.addEventListener('click',()=>{bfStatus=el.dataset.sk;buildStatusBtns();updatePreview();}));
+}
+
+function buildShapePicker(){}
+function buildLineStylePicker(){}
+function buildSizeClassPicker(){}
+
+function buildFormSelects(){
+  document.getElementById('bf-einheit-sel').innerHTML=config.einheiten.map(e=>`<option>${e}</option>`).join('');
+}
+
+function buildCustomFields(vals={}){
+  document.getElementById('custom-fields-wrap').innerHTML=config.customFields.map(f=>
+    `<div class="field"><label>${f.label}</label>
+    <input id="cf-${f.id}" placeholder="${f.label}…" value="${vals[f.id]||''}"/></div>`).join('');
+}
+
+function getCustomValues(){
+  const out={};
+  config.customFields.forEach(f=>{const el=document.getElementById('cf-'+f.id);if(el)out[f.id]=el.value;});
+  return out;
+}
+
+// images
+function addImages(files){
+  Array.from(files).forEach(f=>{
+    if(!f.type.startsWith('image/')) return;
+    const r=new FileReader();
+    r.onload=e=>{bfImages.push({dataUrl:e.target.result});buildImagePreview();};
+    r.readAsDataURL(f);
+  });
+}
+function buildImagePreview(){
+  document.getElementById('img-preview').innerHTML=bfImages.map((img,i)=>
+    `<div class="img-thumb"><img src="${img.dataUrl}" onclick="openLightbox('${img.dataUrl}')"/>
+    <button class="del-img" data-idx="${i}">×</button></div>`).join('');
+  document.querySelectorAll('.del-img').forEach(btn=>btn.addEventListener('click',()=>{bfImages.splice(+btn.dataset.idx,1);buildImagePreview();}));
+}
+const imgDrop=document.getElementById('img-drop');
+imgDrop.addEventListener('click',()=>document.getElementById('img-file-input').click());
+imgDrop.addEventListener('dragover',e=>{e.preventDefault();imgDrop.style.borderColor='#1e40af';});
+imgDrop.addEventListener('dragleave',()=>imgDrop.style.borderColor='');
+imgDrop.addEventListener('drop',e=>{e.preventDefault();imgDrop.style.borderColor='';addImages(e.dataTransfer.files);});
+document.getElementById('img-file-input').addEventListener('change',e=>addImages(e.target.files));
+
+// sliders removed (now defined per typ in settings)
+
+function setFormType(ft){
+  bfFormType=ft;
+  document.getElementById('km-punkt-wrap').style.display=ft==='punkt'?'':'none';
+  document.getElementById('km-linie-wrap').style.display=ft==='linie'?'':'none';
+}
+
+function getTypById(id){return config.bauteilTypen.find(t=>t.id===id)||config.bauteilTypen[0];}
+
+function autoNummer(typId){
+  // count all bauteile of this type across all plans, return kuerzel-N+1
+  const typ=getTypById(typId);
+  if(!typ) return '?-1';
+  const count=plans.flatMap(p=>p.bauteile).filter(b=>b.typId===typId).length;
+  return typ.kuerzel+'-'+(count+1);
+}
+
+function buildTypSelect(selectedId){
+  const sel=document.getElementById('bf-typ-sel');
+  sel.innerHTML=config.bauteilTypen.map(t=>
+    `<option value="${t.id}">${t.formType==='linie'?'─':'●'} ${t.name} (${t.kuerzel})</option>`
+  ).join('');
+  if(selectedId) sel.value=selectedId;
+}
+
+function onTypChange(){
+  const typId=document.getElementById('bf-typ-sel').value;
+  const typ=getTypById(typId);
+  if(!typ) return;
+  bfFormType=typ.formType;
+  // use stored shape/style from typ definition
+  if(typ.formType==='punt'){
+    bfShapeId=typ.shapeId||config.shapes[0]?.id;
+    bfPtSize=typ.ptSize||20;
+  } else {
+    bfShapeId=typ.shapeId||config.shapes[0]?.id;
+    bfPtSize=typ.ptSize||20;
+  }
+  bfLineStyleId=typ.lineStyleId||config.lineStyles[0]?.id;
+  bfLnThick=typ.lnThick||4;
+  bfSizeClassId=typ.sizeClassId||null;
+  // set einheit from typ default
+  const einSel=document.getElementById('bf-einheit-sel');
+  if(typ.einheit&&[...einSel.options].some(o=>o.value===typ.einheit)) einSel.value=typ.einheit;
+  // show LV-POS if defined
+  const lvposWrap=document.getElementById('bf-lvpos-wrap');
+  const lvposField=document.getElementById('bf-lvpos');
+  if(typ.lvpos){
+    lvposField.value=typ.lvpos;
+    lvposWrap.style.display='block';
+  } else {
+    lvposWrap.style.display='none';
+  }
+  // show Einheitspreis if defined
+  const epWrap=document.getElementById('bf-ep-wrap');
+  const epField=document.getElementById('bf-ep');
+  if(typ.einheitspreis){
+    epField.value=Number(typ.einheitspreis).toLocaleString('de-DE',{minimumFractionDigits:2})+' € / '+(typ.einheit||'Stk');
+    epWrap.style.display='block';
+  } else {
+    epWrap.style.display='none';
+  }
+  setFormType(bfFormType);
+  // auto nummer + name only for new bauteile
+  if(!editBid){
+    document.getElementById('bf-nummer').value=autoNummer(typId);
+    const count=plans.flatMap(p=>p.bauteile).filter(b=>b.typId===typId).length;
+    document.getElementById('bf-name').value=typ.name+' '+(count+1);
+  }
+}
+
+function openNewBauteil(){
+  editBid=null; bfStatus='offen'; bfImages=[];
+  bfShapeId=config.shapes[0]?.id||'sh1'; bfLineStyleId=config.lineStyles[0]?.id||'ls1';
+  bfPtSize=20; bfLnThick=4; bfSizeClassId=null;
+  document.getElementById('bf-title').textContent='➕ Neues Bauteil';
+  ['bf-name','bf-km','bf-km-start','bf-km-end','bf-notizen','bf-soll','bf-soll-plan'].forEach(id=>document.getElementById(id).value='');
+  // set today's date
+  document.getElementById('bf-datum').value=new Date().toISOString().slice(0,10);
+  document.getElementById('bf-del').style.display='none';
+  document.getElementById('bf-submit').textContent='Weiter → Platzieren';
+  buildTypSelect(); buildFormSelects(); buildStatusBtns();
+  buildCustomFields(); buildImagePreview();
+  document.getElementById('bf-typ-sel').addEventListener('change',onTypChange);
+  onTypChange(); // apply defaults from first typ
+  document.getElementById('modal-bauteil').classList.add('open');
+}
+
+function openEditBauteil(bid){
+  const ap=activePlan(); if(!ap) return;
+  const b=ap.bauteile.find(x=>x.id===bid); if(!b) return;
+  editBid=bid; bfStatus=b.status; bfFormType=b.formType||'punkt';
+  bfShapeId=b.shapeId||config.shapes[0]?.id;
+  bfLineStyleId=b.lineStyleId||config.lineStyles[0]?.id;
+  bfPtSize=b.ptSize||20; bfLnThick=b.lnThick||4; bfSizeClassId=b.sizeClassId||null;
+  bfImages=[...(b.images||[])];
+  document.getElementById('bf-title').textContent='✏️ Bauteil bearbeiten';
+  document.getElementById('bf-name').value=b.name||'';
+  document.getElementById('bf-nummer').value=b.nummer||'';
+  document.getElementById('bf-soll').value=b.soll||'';
+  document.getElementById('bf-soll-plan').value=b.sollPlan||'';
+  document.getElementById('bf-km').value=b.km||'';
+  document.getElementById('bf-km-start').value=b.kmStart||'';
+  document.getElementById('bf-km-end').value=b.kmEnd||'';
+  document.getElementById('bf-notizen').value=b.notizen||'';
+  document.getElementById('bf-datum').value=b.datum||new Date().toISOString().slice(0,10);
+  document.getElementById('bf-del').style.display='block';
+  document.getElementById('bf-submit').textContent='Speichern';
+  buildTypSelect(b.typId); buildFormSelects();
+  document.getElementById('bf-einheit-sel').value=b.einheit||config.einheiten[0];
+  buildStatusBtns(); buildCustomFields(b.customValues||{}); buildImagePreview();
+  document.getElementById('bf-typ-sel').addEventListener('change',onTypChange);
+  setFormType(bfFormType);
+  document.getElementById('modal-bauteil').classList.add('open');
+}
+
+function closeBF(){document.getElementById('modal-bauteil').classList.remove('open');editBid=null;}
+document.getElementById('bf-cancel').addEventListener('click',closeBF);
+document.getElementById('modal-bauteil').addEventListener('click',e=>{if(e.target===e.currentTarget)closeBF();});
+document.getElementById('bf-del').addEventListener('click',()=>{
+  const ap=activePlan(); if(!ap||!editBid) return;
+  ap.bauteile=ap.bauteile.filter(b=>b.id!==editBid);
+  closeBF(); render(); renderMarkers(); saveProjects();
+});
+document.getElementById('bf-submit').addEventListener('click',()=>{
+  const name=document.getElementById('bf-name').value.trim();
+  if(!name){alert('Bitte einen Namen eingeben.');return;}
+  const ap=activePlan(); if(!ap) return;
+  const typId=document.getElementById('bf-typ-sel').value;
+  const typ=getTypById(typId);
+  // get shape/style from typ definition
+  bfShapeId=config.shapes.find(s=>s.type===typ?.shapeType)?.id||typ?.shapeId||config.shapes[0]?.id;
+  bfLineStyleId=config.lineStyles.find(s=>s.type===typ?.lineStyleType)?.id||typ?.lineStyleId||config.lineStyles[0]?.id;
+  bfPtSize=typ?.ptSize||20;
+  bfLnThick=typ?.lnThick||4;
+  const ft=typ?.formType||'punkt';
+  const data={
+    name, nummer:document.getElementById('bf-nummer').value,
+    typId, typ:typ?.name||'',
+    soll:document.getElementById('bf-soll').value,
+    sollPlan:document.getElementById('bf-soll-plan').value,
+    einheit:document.getElementById('bf-einheit-sel').value,
+    km:document.getElementById('bf-km').value,
+    kmStart:document.getElementById('bf-km-start').value,
+    kmEnd:document.getElementById('bf-km-end').value,
+    notizen:document.getElementById('bf-notizen').value,
+    datum:document.getElementById('bf-datum').value,
+    status:bfStatus, formType:ft,
+    shapeId:bfShapeId, lineStyleId:bfLineStyleId,
+    ptSize:bfPtSize, lnThick:bfLnThick,
+    images:[...bfImages], customValues:getCustomValues(),
+  };
+  if(editBid){
+    ap.bauteile=ap.bauteile.map(b=>b.id===editBid?{...b,...data}:b);
+    closeBF();
+    renderMarkers(); renderTable(); render(); saveProjects();
+  } else { closeBF(); enterPlaceMode(ft, data); }
+});
+
+// ── TABS / SLIDER ─────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>setActiveTab(t.dataset.tab)));
+document.getElementById('tab-add').addEventListener('click',()=>{
+  if(!activePlan()){alert('Bitte zuerst einen Plan laden.');return;}
+  openNewBauteil();
+});
+document.getElementById('km-slider').addEventListener('input',e=>{
+  const s=getSorted(); if(s.length<2) return;
+  const idx=Math.round((+e.target.value/100)*(s.length-1));
+  if(s[idx]&&s[idx].id!==activeId) selectPlan(s[idx].id);
+});
+
+// ── SETTINGS ──────────────────────────────────────────────
+document.querySelectorAll('.stab').forEach(t=>t.addEventListener('click',()=>{
+  document.querySelectorAll('.stab').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.stab-panel').forEach(x=>x.classList.remove('active'));
+  t.classList.add('active');
+  document.getElementById('sp-'+t.dataset.sp).classList.add('active');
+}));
+
+function renderSettings(){
+  // Bauteil-Typen
+  const ftIcon={punkt:'●',linie:'─'};
+  document.getElementById('typen-list').innerHTML=config.bauteilTypen.map((t,i)=>
+    `<div class="shape-def-row">
+      <span style="font-size:14px;width:20px;text-align:center">${ftIcon[t.formType]||'●'}</span>
+      <span class="sname"><b>${t.name}</b> <small style="color:#9ca3af">${t.kuerzel} · ${t.einheit||''}${t.lvpos?' · LV: '+t.lvpos:''}${t.einheitspreis?' · '+Number(t.einheitspreis).toLocaleString('de-DE',{minimumFractionDigits:2})+' €/'+t.einheit:''}</small></span>
+      <button class="sdel" data-i="${i}" data-cfg="bt">🗑</button>
+    </div>`).join('');
+
+  // Gruppen
+  const gl=document.getElementById('gruppen-list');
+  if(gl){
+    gl.innerHTML=config.gruppen.length?config.gruppen.map((g,i)=>{
+      const typenNames=g.typIds.map(tid=>config.bauteilTypen.find(t=>t.id===tid)?.name||tid).join(', ');
+      return`<div class="shape-def-row">
+        <span style="font-size:16px">📦</span>
+        <span class="sname"><b>${g.name}</b> <small style="color:#9ca3af">${typenNames||'keine Typen'}</small></span>
+        <button class="sdel" data-i="${i}" data-cfg="gruppe">🗑</button>
+      </div>`;
+    }).join(''):'<div style="font-size:12px;color:#9ca3af;padding:8px">Noch keine Gruppen definiert.</div>';
+    // Checkboxen für neuen Typ — als DOM Elemente damit der Zustand korrekt ist
+    const cbs=document.getElementById('gruppe-typ-checkboxes');
+    if(cbs){
+      cbs.innerHTML='';
+      config.bauteilTypen.forEach(t=>{
+        const lbl=document.createElement('label');
+        lbl.style.cssText='display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;background:#f3f4f6;padding:4px 8px;border-radius:6px';
+        const cb=document.createElement('input');
+        cb.type='checkbox';
+        cb.value=t.id;
+        cb.style.cursor='pointer';
+        lbl.appendChild(cb);
+        lbl.appendChild(document.createTextNode(' '+t.name));
+        cbs.appendChild(lbl);
+      });
+    }
+  }
+  // populate new-typ-einheit select
+  document.getElementById('new-typ-einheit').innerHTML=config.einheiten.map(e=>`<option>${e}</option>`).join('');
+  // Einheiten
+  document.getElementById('einheiten-list').innerHTML=config.einheiten.map((e,i)=>
+    `<span class="tag">${e}<button class="rm" data-i="${i}" data-cfg="einheit">×</button></span>`).join('');
+  // Shapes
+  const icons={circle:'●',square:'■',triangle:'▲',diamond:'◆',star:'★',cross:'✚',hexagon:'⬡',pentagon:'⬠'};
+  document.getElementById('shape-defs-list').innerHTML=config.shapes.map((s,i)=>
+    `<div class="shape-def-row">
+      <span style="font-size:20px;width:32px;text-align:center">${icons[s.type]||'●'}</span>
+      <span class="sname">${s.name} <small style="color:#9ca3af">(${s.type})</small></span>
+      <button class="sdel" data-i="${i}" data-cfg="shape">🗑</button>
+    </div>`).join('');
+  // Line styles
+  const lstyle={solid:'───',dashed:'- - -',dotted:'·····',dashdot:'-·-·-'};
+  document.getElementById('linestyle-defs-list').innerHTML=config.lineStyles.map((ls,i)=>
+    `<div class="shape-def-row">
+      <span style="font-size:14px;font-weight:700;width:32px">${lstyle[ls.type]||'─'}</span>
+      <span class="sname">${ls.name}</span>
+      <button class="sdel" data-i="${i}" data-cfg="linestyle">🗑</button>
+    </div>`).join('');
+  // Status
+  document.getElementById('status-edit-list').innerHTML=Object.entries(config.status).map(([k,v])=>
+    `<div class="status-edit-row">
+      <input type="color" class="sc" value="${v.color}" data-sk="${k}"/>
+      <input class="sn" value="${v.label}" data-sk="${k}" ${v.fixed?'readonly style="color:#8b5cf6;font-weight:700"':''}/>
+      ${v.fixed?`<span style="font-size:11px;color:#8b5cf6;padding:0 6px">fest</span>`:`<button class="sdel" data-sk="${k}">🗑</button>`}
+    </div>`).join('');
+  document.querySelectorAll('.sc[data-sk]').forEach(el=>el.addEventListener('input',e=>{config.status[e.target.dataset.sk].color=e.target.value;renderStatsBar();}));
+  document.querySelectorAll('.sn[data-sk]').forEach(el=>el.addEventListener('input',e=>{config.status[e.target.dataset.sk].label=e.target.value;renderStatsBar();}));
+  document.querySelectorAll('.sdel[data-sk]').forEach(el=>el.addEventListener('click',e=>{
+    const k=e.target.dataset.sk;
+    if(config.status[k]?.fixed){alert('Dieser Status kann nicht gelöscht werden.');return;}
+    if(Object.keys(config.status).length<=1){alert('Mindestens ein Status muss vorhanden sein.');return;}
+    delete config.status[k]; renderSettings(); renderStatsBar();
+  }));
+  // Custom fields
+  document.getElementById('custom-fields-list').innerHTML=config.customFields.map((f,i)=>
+    `<span class="tag">${f.label}<button class="rm" data-i="${i}" data-cfg="cf">×</button></span>`).join('');
+  // remove buttons
+  document.querySelectorAll('.rm').forEach(btn=>btn.addEventListener('click',()=>{
+    const i=+btn.dataset.i,cfg=btn.dataset.cfg;
+    if(cfg==='einheit') config.einheiten.splice(i,1);
+    else if(cfg==='shape') config.shapes.splice(i,1);
+    else if(cfg==='linestyle') config.lineStyles.splice(i,1);
+    else if(cfg==='sc') config.sizeClasses.splice(i,1);
+    else if(cfg==='cf') config.customFields.splice(i,1);
+    renderSettings();
+  }));
+  document.querySelectorAll('.sdel[data-cfg]').forEach(btn=>btn.addEventListener('click',()=>{
+    const i=+btn.dataset.i,cfg=btn.dataset.cfg;
+    if(cfg==='bt') config.bauteilTypen.splice(i,1);
+    else if(cfg==='gruppe') config.gruppen.splice(i,1);
+    else if(cfg==='shape') config.shapes.splice(i,1);
+    else if(cfg==='linestyle') config.lineStyles.splice(i,1);
+    else if(cfg==='sc') config.sizeClasses.splice(i,1);
+    renderSettings();
+  }));
+}
+
+document.getElementById('btn-settings').addEventListener('click',()=>{renderSettings();document.getElementById('modal-settings').classList.add('open');});
+document.getElementById('settings-close').addEventListener('click',()=>{document.getElementById('modal-settings').classList.remove('open');render();});
+document.getElementById('modal-settings').addEventListener('click',e=>{if(e.target===e.currentTarget){document.getElementById('modal-settings').classList.remove('open');render();}});
+
+function addTagHandler(inputId, btnId, arr, dedup=true){
+  const btn=document.getElementById(btnId);
+  const inp=document.getElementById(inputId);
+  btn.addEventListener('click',()=>{
+    const v=inp.value.trim(); if(!v) return;
+    if(dedup&&arr.includes(v)){inp.value='';return;}
+    arr.push(v); inp.value=''; renderSettings();
+  });
+  inp.addEventListener('keydown',e=>{if(e.key==='Enter')btn.click();});
+}
+function toggleNewTypOpts(){
+  const ft=document.getElementById('new-typ-formtype').value;
+  document.getElementById('new-typ-punkt-opts').style.display=ft==='punkt'?'':'none';
+  document.getElementById('new-typ-linie-opts').style.display=ft==='linie'?'':'none';
+}
+
+document.getElementById('add-typ-btn').addEventListener('click',()=>{
+  const name=document.getElementById('new-typ-name').value.trim();
+  const kuerzel=document.getElementById('new-typ-kuerzel').value.trim().toUpperCase();
+  const lvpos=document.getElementById('new-typ-lvpos').value.trim();
+  const einheitspreis=parseFloat(document.getElementById('new-typ-ep').value)||0;
+  const formType=document.getElementById('new-typ-formtype').value;
+  const einheit=document.getElementById('new-typ-einheit').value;
+  if(!name||!kuerzel){alert('Bitte Name und Kürzel eingeben.');return;}
+
+  // Stabile ID basierend auf Kürzel — so bleibt sie gleich wenn Typ neu angelegt wird
+  const stableId='typ_'+kuerzel.toLowerCase().replace(/[^a-z0-9]/g,'_');
+
+  // Wenn Typ mit dieser ID schon existiert → updaten statt neu anlegen
+  const existing=config.bauteilTypen.find(t=>t.id===stableId);
+  if(existing){
+    if(!confirm(`Typ "${existing.name}" (${kuerzel}) existiert bereits. Überschreiben?\n\nAchtung: Alle Bauteile dieses Typs bleiben erhalten.`)) return;
+    config.bauteilTypen=config.bauteilTypen.filter(t=>t.id!==stableId);
+  }
+
+  const newTyp={
+    id:stableId, name, kuerzel, lvpos, einheitspreis, formType, einheit,
+    shapeId:null, lineStyleId:null, sizeClassId:null,
+    shapeType: formType==='punkt'?document.getElementById('new-typ-shape').value:null,
+    ptSize: formType==='punkt'?+document.getElementById('new-typ-size').value:20,
+    lineStyleType: formType==='linie'?document.getElementById('new-typ-linestyle').value:null,
+    lnThick: formType==='linie'?+document.getElementById('new-typ-thick').value:4,
+  };
+  if(formType==='punkt'){
+    const sh=config.shapes.find(s=>s.type===newTyp.shapeType);
+    if(sh) newTyp.shapeId=sh.id;
+  } else {
+    const ls=config.lineStyles.find(s=>s.type===newTyp.lineStyleType);
+    if(ls) newTyp.lineStyleId=ls.id;
+  }
+  config.bauteilTypen.push(newTyp);
+  document.getElementById('new-typ-name').value='';
+  document.getElementById('new-typ-kuerzel').value='';
+  document.getElementById('new-typ-lvpos').value='';
+  document.getElementById('new-typ-ep').value='';
+  renderSettings();
+  saveProjects();
+});
+addTagHandler('new-einheit','add-einheit-btn',config.einheiten);
+
+document.getElementById('add-gruppe-btn').addEventListener('click',()=>{
+  const name=document.getElementById('new-gruppe-name').value.trim();
+  if(!name){alert('Bitte Gruppenname eingeben.');return;}
+  // Explizit die gechecken Werte lesen BEVOR renderSettings sie löscht
+  const checked=[...document.querySelectorAll('#gruppe-typ-checkboxes input[type="checkbox"]')];
+  const typIds=checked.filter(cb=>cb.checked).map(cb=>cb.value);
+  if(!typIds.length){alert('Bitte mindestens einen Typ auswählen.');return;}
+  if(config.gruppen.some(g=>g.name===name)){alert('Gruppe "'+name+'" existiert bereits.');return;}
+  // Nur die IDs die wirklich existieren
+  const validIds=typIds.filter(id=>config.bauteilTypen.some(t=>t.id===id));
+  if(!validIds.length){alert('Keine gültigen Typen ausgewählt.');return;}
+  config.gruppen.push({id:nid(),name,typIds:validIds});
+  document.getElementById('new-gruppe-name').value='';
+  renderSettings();
+  saveProjects();
+});
+
+document.getElementById('add-shape-btn').addEventListener('click',()=>{
+  const type=document.getElementById('new-shape-type').value;
+  const name=document.getElementById('new-shape-name').value.trim()||type;
+  config.shapes.push({id:nid(),type,name});
+  document.getElementById('new-shape-name').value=''; renderSettings();
+});
+document.getElementById('add-linestyle-btn').addEventListener('click',()=>{
+  const type=document.getElementById('new-linestyle-type').value;
+  const name=document.getElementById('new-linestyle-name').value.trim()||type;
+  config.lineStyles.push({id:nid(),type,name});
+  document.getElementById('new-linestyle-name').value=''; renderSettings();
+});
+document.getElementById('add-status-btn').addEventListener('click',()=>{
+  const name=document.getElementById('new-status-name').value.trim();
+  const color=document.getElementById('new-status-color').value;
+  if(!name) return;
+  config.status[nid()]={label:name,color};
+  document.getElementById('new-status-name').value=''; renderSettings(); renderStatsBar();
+});
+document.getElementById('new-status-name').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('add-status-btn').click();});
+document.getElementById('add-custom-field-btn').addEventListener('click',()=>{
+  const v=document.getElementById('new-custom-field').value.trim(); if(!v) return;
+  config.customFields.push({id:nid(),label:v});
+  document.getElementById('new-custom-field').value=''; renderSettings();
+});
+document.getElementById('new-custom-field').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('add-custom-field-btn').click();});
+
+// ── LIGHTBOX ──────────────────────────────────────────────
+function openLightbox(src){document.getElementById('lightbox-img').src=src;document.getElementById('lightbox').classList.add('open');}
+function closeLightbox(){document.getElementById('lightbox').classList.remove('open');}
+document.getElementById('lightbox').addEventListener('click',e=>{if(e.target===e.currentTarget)closeLightbox();});
+// ── ZOOM ──────────────────────────────────────────────────
+document.getElementById('zoom-in').addEventListener('click',zoomIn);
+document.getElementById('zoom-out').addEventListener('click',zoomOut);
+document.getElementById('zoom-reset').addEventListener('click',zoomReset);
+
+// Mausrad-Zoom auf dem Plan
+document.getElementById('plan-view').addEventListener('wheel',e=>{
+  if(!e.ctrlKey&&!e.metaKey) return; // nur mit Strg/Cmd
+  e.preventDefault();
+  if(e.deltaY<0) zoomIn(); else zoomOut();
+},{passive:false});
+
+// Pinch-Zoom auf Touch (optional)
+document.getElementById('plan-view').addEventListener('wheel',e=>{
+  if(e.ctrlKey||e.metaKey) return; // handled above
+},{passive:true});
+
+// Tastaturkürzel + und -
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){
+    closeLightbox();
+    if(moveMode) exitMoveMode();
+    if(combineMode) exitCombineMode();
+  }
+  if((e.ctrlKey||e.metaKey)&&e.key==='+'){e.preventDefault();zoomIn();}
+  if((e.ctrlKey||e.metaKey)&&e.key==='-'){e.preventDefault();zoomOut();}
+  if((e.ctrlKey||e.metaKey)&&e.key==='0'){e.preventDefault();zoomReset();}
+});
+
+// ── PROJECT DASHBOARD ─────────────────────────────────────
+const PS_STATUS={
+  planung:{label:'Planung',color:'#64748b'},
+  aktiv:{label:'Aktiv',color:'#22c55e'},
+  pause:{label:'Pause',color:'#f59e0b'},
+  abgeschlossen:{label:'Abgeschlossen',color:'#3b82f6'},
+};
+
+// safe storage wrapper (localStorage kann in manchen Umgebungen fehlen)
+// ── SUPABASE ──────────────────────────────────────────────
+const SUPA_URL='https://eoyilsxaelrnbujxshyf.supabase.co';
+const SUPA_KEY='sb_publishable_xujT7oA_efnFueKZiIB2JA_-1_1odAR';
+const sb=supabase.createClient(SUPA_URL,SUPA_KEY);
+
+function setSyncStatus(msg,color='#64748b'){
+  let el=document.getElementById('sync-status');
+  if(!el){el=document.createElement('div');el.id='sync-status';
+    el.style.cssText='position:fixed;bottom:12px;left:50%;transform:translateX(-50%);background:#1e293b;border:1px solid #334155;border-radius:20px;padding:5px 14px;font-size:11px;font-weight:600;z-index:9999;pointer-events:none';
+    document.body.appendChild(el);}
+  el.style.color=color;el.textContent=msg;
+  if(color==='#22c55e') setTimeout(()=>{el.textContent='';},3000);
+}
+
+const Store={
+  _data:{},
+  get(k){try{const v=localStorage.getItem(k);return v?JSON.parse(v):null;}catch{return this._data[k]||null;}},
+  set(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch{this._data[k]=v;}},
+};
+
+let projects=[];  // Supabase ist die Quelle — kein lokales Prefill
+let activeProjectId=null;
+let _saving=false;
+
+async function saveProjects(){
+  if(activeProjectId){
+    const idx=projects.findIndex(p=>p.id===activeProjectId);
+    if(idx>=0){projects[idx].plans=plans;projects[idx].activeId=activeId;}
+  }
+  if(_saving) return;
+  _saving=true;
+  try{
+    if(activeProjectId){
+      const proj=projects.find(p=>p.id===activeProjectId);
+      if(proj) await syncProjectToSupabase(proj);
+    }
+    setSyncStatus('✓ Gespeichert','#22c55e');
+  }catch(e){
+    setSyncStatus('⚠ Nur lokal gespeichert','#f59e0b');
+    console.error('Supabase sync:',e);
+  }
+  _saving=false;
+}
+
+// Nur das aktive Projekt neu laden (für Refresh ohne alles neu zu laden)
+async function reloadActiveProject(){
+  if(!activeProjectId) return;
+  setSyncStatus('⟳ Aktualisiere...','#93c5fd');
+  try{
+    // Pläne neu laden
+    const{data:plaene}=await sb.from('plaene').select('*').eq('projekt_id',activeProjectId);
+    const plansLoaded=[];
+    for(const plan of (plaene||[])){
+      // Bestehende blob URL wiederverwenden wenn möglich
+      const existing=plans.find(p=>p.id===plan.id);
+      let url=existing?.url||'';
+      if(!url && plan.pdf_data?.startsWith('data:application/pdf')){
+        try{const res=await fetch(plan.pdf_data);const blob=await res.blob();url=URL.createObjectURL(blob);}
+        catch(e){url='';}
+      }
+      const{data:bauteile}=await sb.from('bauteile').select('*').eq('plan_id',plan.id);
+      plansLoaded.push({id:plan.id,name:plan.name,
+        kmStart:plan.km_start,kmEnd:plan.km_end,
+        ks:plan.ks,ke:plan.ke,url,
+        bauteile:(bauteile||[]).map(b=>b.data)});
+    }
+    // Config neu laden
+    const{data:cfg}=await sb.from('projekt_config').select('*').eq('projekt_id',activeProjectId).maybeSingle();
+    if(cfg?.data){
+      config=getDefaultConfig();
+      if(cfg.data.bauteilTypen?.length) config.bauteilTypen=cfg.data.bauteilTypen;
+      if(cfg.data.einheiten?.length) config.einheiten=cfg.data.einheiten;
+      if(cfg.data.gruppen) config.gruppen=cfg.data.gruppen;
+      if(cfg.data.customFields) config.customFields=cfg.data.customFields;
+      if(cfg.data.shapes?.length) config.shapes=cfg.data.shapes;
+      if(cfg.data.lineStyles?.length) config.lineStyles=cfg.data.lineStyles;
+      if(cfg.data.sizeClasses?.length) config.sizeClasses=cfg.data.sizeClasses;
+      if(cfg.data.status) Object.assign(config.status,cfg.data.status);
+    }
+    // State aktualisieren
+    plans=plansLoaded;
+    const idx=projects.findIndex(p=>p.id===activeProjectId);
+    if(idx>=0) projects[idx].plans=plansLoaded;
+    // Aktiven Plan beibehalten wenn noch vorhanden
+    if(activeId && !plans.find(p=>p.id===activeId)) activeId=plans[0]?.id||null;
+    render();
+    if(activeId) await renderPDF(plans.find(p=>p.id===activeId)?.url||'');
+    renderMarkers();
+    setSyncStatus('✓ Aktualisiert','#22c55e');
+  }catch(e){
+    console.error('Reload error:',e);
+    setSyncStatus('⚠ Fehler beim Laden','#ef4444');
+  }
+}
+
+async function syncProjectToSupabase(proj){
+  // Projekt-Metadaten speichern
+  await sb.from('projekte').upsert({
+    id:proj.id,name:proj.name,nummer:proj.nummer||'',
+    auftraggeber:proj.auftraggeber||'',strecke:proj.strecke||'',
+    datum:proj.datum||'',status:proj.status||'aktiv',
+    beschreibung:proj.beschreibung||'',active_id:proj.activeId||'',
+    updated_at:new Date().toISOString()
+  });
+
+  // Config speichern
+  await sb.from('projekt_config').upsert({
+    projekt_id:proj.id,
+    data:{bauteilTypen:config.bauteilTypen,einheiten:config.einheiten,
+      status:config.status,shapes:config.shapes,lineStyles:config.lineStyles,
+      sizeClasses:config.sizeClasses,customFields:config.customFields,gruppen:config.gruppen},
+    updated_at:new Date().toISOString()
+  });
+
+  for(const plan of (proj.plans||[])){
+    // Plan speichern — PDF nur wenn noch nicht in DB oder blob
+    const{data:existingPlan}=await sb.from('plaene').select('id,pdf_data').eq('id',plan.id).maybeSingle();
+    let pdfData=existingPlan?.pdf_data||''; // vorhandene PDF behalten
+
+    // Nur konvertieren wenn noch keine PDF in DB gespeichert
+    if(!pdfData && plan.url){
+      if(plan.url.startsWith('blob:')){
+        try{
+          setSyncStatus('⟳ PDF wird hochgeladen...','#93c5fd');
+          const resp=await fetch(plan.url);const buf=await resp.arrayBuffer();
+          const bytes=new Uint8Array(buf);let bin='';
+          bytes.forEach(b=>bin+=String.fromCharCode(b));
+          pdfData='data:application/pdf;base64,'+btoa(bin);
+        }catch(e){pdfData='';}
+      } else if(plan.url.startsWith('data:')){
+        pdfData=plan.url;
+      }
+    }
+
+    await sb.from('plaene').upsert({
+      id:plan.id,projekt_id:proj.id,name:plan.name,
+      km_start:plan.kmStart,km_end:plan.kmEnd,
+      ks:plan.ks||0,ke:plan.ke||0,
+      pdf_data:pdfData,updated_at:new Date().toISOString()
+    });
+
+    // Bauteile alle auf einmal speichern (schnell)
+    if(plan.bauteile?.length){
+      const rows=plan.bauteile.map(b=>({
+        id:b.id,plan_id:plan.id,
+        data:b,updated_at:new Date().toISOString()
+      }));
+      await sb.from('bauteile').upsert(rows);
+    }
+  }
+}
+
+async function loadFromSupabase(){
+  setSyncStatus('⟳ Lade von Cloud...','#93c5fd');
+  try{
+    const{data:projekte,error}=await sb.from('projekte').select('*');
+    if(error) throw error;
+    if(!projekte||!projekte.length){setSyncStatus('','#64748b');return false;}
+    const loaded=[];
+    for(const p of projekte){
+      const{data:plaene}=await sb.from('plaene').select('*').eq('projekt_id',p.id);
+      const plansLoaded=[];
+      for(const plan of (plaene||[])){
+        let url=plan.pdf_data||'';
+        if(url.startsWith('data:application/pdf')){
+          try{const res=await fetch(url);const blob=await res.blob();url=URL.createObjectURL(blob);}
+          catch(e){url='';}
+        }
+        const{data:bauteile}=await sb.from('bauteile').select('*').eq('plan_id',plan.id);
+        plansLoaded.push({id:plan.id,name:plan.name,
+          kmStart:plan.km_start,kmEnd:plan.km_end,
+          ks:plan.ks,ke:plan.ke,url,
+          bauteile:(bauteile||[]).map(b=>b.data)});
+      }
+      const{data:cfg}=await sb.from('projekt_config').select('*').eq('projekt_id',p.id).maybeSingle();
+      loaded.push({id:p.id,name:p.name,nummer:p.nummer,
+        auftraggeber:p.auftraggeber,strecke:p.strecke,
+        datum:p.datum,status:p.status,beschreibung:p.beschreibung,
+        activeId:p.active_id,plans:plansLoaded,
+        _config:cfg?.data||null  // config separat speichern, nicht direkt anwenden
+      });
+    }
+    projects=loaded;
+    Store.set('bp_projects',projects);
+    setSyncStatus('✓ Cloud geladen','#22c55e');
+    return true;
+  }catch(e){
+    console.error('Load error:',e);
+    setSyncStatus('⚠ Offline — lokale Daten','#f59e0b');
+    return false;
+  }
+}
+
+document.getElementById('btn-refresh').addEventListener('click',reloadActiveProject);
+
+function setupRealtime(){
+  sb.channel('projekt-changes')
+    .on('postgres_changes',{event:'*',schema:'public',table:'bauteile'},()=>{
+      if(activeProjectId) reloadActiveProject();
+    })
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'plaene'},()=>{
+      if(activeProjectId) reloadActiveProject();
+    })
+    .subscribe();
+}
+
+function getProjectStats(proj){
+  const allB=(proj.plans||[]).flatMap(p=>p.bauteile||[]);
+  const total=allB.length, fertig=allB.filter(b=>b.status==='fertig').length;
+  return{total,fertig,pct:total?Math.round(fertig/total*100):0,planCount:(proj.plans||[]).length};
+}
+
+function renderProjectScreen(){
+  const grid=document.getElementById('ps-grid');
+  const empty=document.getElementById('ps-empty');
+  if(!projects.length){empty.style.display='block';grid.innerHTML='';return;}
+  empty.style.display='none';
+  grid.innerHTML=projects.map(p=>{
+    const st=PS_STATUS[p.status]||PS_STATUS.aktiv;
+    const stats=getProjectStats(p);
+    return`<div class="ps-card" data-pid="${p.id}">
+      <div class="ps-card-header">
+        <div class="ps-card-icon">🏗</div>
+        <div>
+          <div class="ps-card-title">${p.name}</div>
+          <div class="ps-card-nr">${p.nummer||'–'}</div>
+        </div>
+      </div>
+      <div class="ps-card-meta">
+        ${p.auftraggeber?`<span>🏢 ${p.auftraggeber}</span>`:''}
+        ${p.strecke?`<span>📍 ${p.strecke}</span>`:''}
+        ${p.datum?`<span>📅 ${p.datum}</span>`:''}
+      </div>
+      <div class="ps-progress-wrap">
+        <div class="ps-progress-bar" style="width:${stats.pct}%;background:${stats.pct===100?'#22c55e':'#e30613'}"></div>
+      </div>
+      <div class="ps-progress-label">
+        <span>${stats.fertig}/${stats.total} Bauteile fertig</span>
+        <span>${stats.pct}%</span>
+      </div>
+      <div class="ps-card-footer">
+        <span class="ps-status-badge" style="background:${st.color}">${st.label}</span>
+        <span style="font-size:11px;color:#64748b">${stats.planCount} Plan${stats.planCount!==1?'e':''}</span>
+        <button class="ps-open-btn" data-pid="${p.id}">Öffnen →</button>
+        <button class="ps-edit-btn" data-pid="${p.id}" title="Bearbeiten" style="background:none;border:1px solid #334155;color:#64748b;border-radius:7px;padding:4px 10px;font-size:11px;cursor:pointer">✏️</button>
+        <button class="ps-export-btn" data-pid="${p.id}" title="Exportieren" style="background:none;border:1px solid #334155;color:#64748b;border-radius:7px;padding:4px 10px;font-size:11px;cursor:pointer">⬇</button>
+        <button class="ps-del-btn" data-del="${p.id}" title="Löschen">🗑</button>
+      </div>
+    </div>`;
+  }).join('');
+  grid.querySelectorAll('.ps-open-btn').forEach(btn=>btn.addEventListener('click',e=>{e.stopPropagation();openProject(btn.dataset.pid);}));
+  grid.querySelectorAll('.ps-edit-btn').forEach(btn=>btn.addEventListener('click',e=>{e.stopPropagation();openEditProjectModal(btn.dataset.pid);}));
+  grid.querySelectorAll('.ps-card').forEach(card=>card.addEventListener('click',()=>openProject(card.dataset.pid)));
+  grid.querySelectorAll('.ps-export-btn').forEach(btn=>btn.addEventListener('click',async e=>{
+    e.stopPropagation();
+    const proj=projects.find(p=>p.id===btn.dataset.pid); if(!proj) return;
+    btn.textContent='⏳'; btn.disabled=true;
+    const plansExport=await Promise.all((proj.plans||[]).map(async p=>{
+      let pdfData=null;
+      if(p.url&&p.url.startsWith('blob:')){
+        try{const resp=await fetch(p.url);const buf=await resp.arrayBuffer();
+          const bytes=new Uint8Array(buf);let bin='';bytes.forEach(b=>bin+=String.fromCharCode(b));
+          pdfData='data:application/pdf;base64,'+btoa(bin);}catch(e){pdfData=null;}
+      } else if(p.url?.startsWith('data:')) pdfData=p.url;
+      return{...p,url:pdfData};
+    }));
+    const data={_version:'5.8',_exported:new Date().toISOString(),_app:'Bauplanmanager',
+      project:{...proj,plans:plansExport},
+      config:{bauteilTypen:config.bauteilTypen,einheiten:config.einheiten,status:config.status,
+        shapes:config.shapes,lineStyles:config.lineStyles,sizeClasses:config.sizeClasses,
+        customFields:config.customFields,gruppen:config.gruppen}};
+    const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download=`${proj.name.replace(/[^a-zA-Z0-9]/g,'_')}_${new Date().toISOString().slice(0,10)}.json`;
+    a.click(); URL.revokeObjectURL(url);
+    btn.textContent='⬇'; btn.disabled=false;
+  }));
+  grid.querySelectorAll('.ps-del-btn').forEach(btn=>btn.addEventListener('click',async e=>{
+    e.stopPropagation();
+    const proj=projects.find(p=>p.id===btn.dataset.del);
+    if(!proj||!confirm(`Projekt "${proj.name}" wirklich löschen?\nAlle Pläne und Bauteile werden unwiderruflich gelöscht.`)) return;
+    setSyncStatus('⟳ Lösche...','#ef4444');
+    try{
+      // In Supabase löschen (cascade löscht Pläne + Bauteile + Config automatisch)
+      await sb.from('projekte').delete().eq('id',proj.id);
+      setSyncStatus('✓ Gelöscht','#22c55e');
+    }catch(e){
+      console.error('Delete error:',e);
+      setSyncStatus('⚠ Nur lokal gelöscht','#f59e0b');
+    }
+    projects=projects.filter(p=>p.id!==btn.dataset.del);
+    Store.set('bp_projects',projects);
+    renderProjectScreen();
+  }));
+}
+
+function openProject(pid){
+  const proj=projects.find(p=>p.id===pid); if(!proj) return;
+  activeProjectId=pid;
+  Store.set('bp_last_project',pid);
+  plans=proj.plans||[]; activeId=proj.activeId||null;
+  // Config auf Default zurücksetzen, dann Projekt-Config laden
+  config=getDefaultConfig();
+  if(proj._config){
+    if(proj._config.bauteilTypen?.length) config.bauteilTypen=proj._config.bauteilTypen;
+    if(proj._config.einheiten?.length) config.einheiten=proj._config.einheiten;
+    if(proj._config.gruppen) config.gruppen=proj._config.gruppen;
+    if(proj._config.customFields) config.customFields=proj._config.customFields;
+    if(proj._config.shapes?.length) config.shapes=proj._config.shapes;
+    if(proj._config.lineStyles?.length) config.lineStyles=proj._config.lineStyles;
+    if(proj._config.sizeClasses?.length) config.sizeClasses=proj._config.sizeClasses;
+    if(proj._config.status) Object.assign(config.status,proj._config.status);
+  }
+  document.getElementById('header-project-name').textContent='✏️ '+proj.name;
+  document.getElementById('project-screen').classList.add('hidden');
+  render();
+  if(activeId) selectPlan(activeId);
+  else if(plans.length) selectPlan(plans[0].id);
+}
+
+function openNewProjectModal(){
+  ['np-name','np-nummer','np-auftraggeber','np-strecke','np-beschreibung'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('np-datum').value=new Date().toISOString().slice(0,10);
+  document.getElementById('np-status').value='aktiv';
+  document.getElementById('modal-new-project').querySelector('h2').textContent='📋 Neues Projekt';
+  document.getElementById('np-submit').textContent='Projekt anlegen';
+  document.getElementById('np-submit').dataset.editId='';
+  document.getElementById('modal-new-project').classList.add('open');
+}
+
+function openEditProjectModal(pid){
+  const proj=projects.find(p=>p.id===pid); if(!proj) return;
+  document.getElementById('np-name').value=proj.name||'';
+  document.getElementById('np-nummer').value=proj.nummer||'';
+  document.getElementById('np-auftraggeber').value=proj.auftraggeber||'';
+  document.getElementById('np-strecke').value=proj.strecke||'';
+  document.getElementById('np-datum').value=proj.datum||'';
+  document.getElementById('np-status').value=proj.status||'aktiv';
+  document.getElementById('np-beschreibung').value=proj.beschreibung||'';
+  document.getElementById('modal-new-project').querySelector('h2').textContent='✏️ Projekt bearbeiten';
+  document.getElementById('np-submit').textContent='Änderungen speichern';
+  document.getElementById('np-submit').dataset.editId=pid;
+  document.getElementById('modal-new-project').classList.add('open');
+}
+
+document.getElementById('np-cancel').addEventListener('click',()=>document.getElementById('modal-new-project').classList.remove('open'));
+document.getElementById('modal-new-project').addEventListener('click',e=>{if(e.target===e.currentTarget)document.getElementById('modal-new-project').classList.remove('open');});
+document.getElementById('np-submit').addEventListener('click',()=>{
+  const name=document.getElementById('np-name').value.trim();
+  if(!name){alert('Bitte Projektname eingeben.');return;}
+  const editId=document.getElementById('np-submit').dataset.editId;
+  const fields={
+    name,
+    nummer:document.getElementById('np-nummer').value.trim(),
+    auftraggeber:document.getElementById('np-auftraggeber').value.trim(),
+    strecke:document.getElementById('np-strecke').value.trim(),
+    datum:document.getElementById('np-datum').value,
+    status:document.getElementById('np-status').value,
+    beschreibung:document.getElementById('np-beschreibung').value.trim(),
+  };
+  if(editId){
+    // Bearbeiten
+    const idx=projects.findIndex(p=>p.id===editId);
+    if(idx>=0) projects[idx]={...projects[idx],...fields};
+    saveProjects();
+    document.getElementById('modal-new-project').classList.remove('open');
+    renderProjectScreen();
+  } else {
+    // Neu anlegen
+    const proj={id:'p'+Date.now(),...fields,plans:[],activeId:null};
+    projects.push(proj); saveProjects();
+    document.getElementById('modal-new-project').classList.remove('open');
+    openProject(proj.id);
+  }
+});
+
+document.getElementById('btn-back-projects').addEventListener('click',()=>{
+  saveProjects();
+  activeProjectId=null; plans=[]; activeId=null;
+  config=getDefaultConfig(); // Config zurücksetzen
+  document.getElementById('project-screen').classList.remove('hidden');
+  renderProjectScreen();
+  render();
+});
+
+// ── INIT ──────────────────────────────────────────────────
+(async()=>{
+  // Ladescreen anzeigen
+  setSyncStatus('⟳ Verbinde mit Cloud...','#93c5fd');
+  try { render(); } catch(e){ console.error('render error:',e); }
+
+  // Erst Cloud laden, dann UI aufbauen
+  const loaded=await loadFromSupabase();
+  try { renderProjectScreen(); } catch(e){ console.error(e); }
+
+  // Wenn Projekt offen war, wieder öffnen
+  if(loaded && projects.length){
+    const lastProjId=Store.get('bp_last_project');
+    if(lastProjId && projects.some(p=>p.id===lastProjId)){
+      openProject(lastProjId);
+    }
+  }
+
+  setupRealtime();
+})();
+</script>
+</body>
+</html>
